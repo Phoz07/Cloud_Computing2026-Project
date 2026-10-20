@@ -1,20 +1,13 @@
-import type { QueryClient } from '@tanstack/react-query'
-import { createRootRouteWithContext, Outlet } from '@tanstack/react-router'
-import { SiteHeader } from '@/components/site-header'
-import { Toaster } from '@/components/ui/sonner'
+import Navbar from "@/components/navbar";
+import { createRootRoute, Link, Outlet } from "@tanstack/react-router";
 
-export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  component: RootLayout,
-})
-
-function RootLayout() {
-  return (
-    <div className="flex min-h-svh flex-col bg-background text-foreground">
-      <SiteHeader />
-      <div className="flex flex-1 flex-col">
+export const Route = createRootRoute({
+  component: () => (
+    <>
+      <Navbar />
+      <main className="p-4">
         <Outlet />
-      </div>
-      <Toaster />
-    </div>
-  )
-}
+      </main>
+    </>
+  ),
+});

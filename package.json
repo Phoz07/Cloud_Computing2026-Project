@@ -1,22 +1,27 @@
 {
-  "name": "eventide",
-  "private": true,
+  "name": "cloud-project",
+  "module": "index.ts",
   "type": "module",
-  "packageManager": "bun@1.4.0",
-  "workspaces": ["apps/*", "packages/*"],
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "turbo run dev",
-    "build": "turbo run build",
-    "lint": "turbo run lint",
-    "check-types": "turbo run check-types",
-    "test": "turbo run test",
-    "format": "biome format --write ."
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "infra:reset": "docker compose down -v && docker compose up -d",
+    "db:generate": "bun run --filter @app/db db:generate",
+    "db:migrate": "bun run --filter @app/db db:migrate",
+    "db:studio": "bun run --filter @app/db db:studio",
+    "dev": "bun run --parallel --filter './apps/*' dev",
+    "typecheck": "bun check"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.2.4",
-    "@types/bun": "^1.2.23",
-    "puppeteer-core": "^25.10.0",
-    "turbo": "^2.5.8",
-    "typescript": "^5.9.2"
+    "@types/bun": "^1.4.3"
+  },
+  "peerDependencies": {
+    "typescript": "^7.0.2"
   }
 }

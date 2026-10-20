@@ -1,31 +1,18 @@
 {
-  "name": "@eventide/db",
-  "version": "0.0.0",
+  "name": "@app/db",
   "private": true,
   "type": "module",
-  "exports": {
-    "./auth": "./src/auth/index.ts",
-    "./event": "./src/event/schema.ts",
-    "./registration": "./src/registration/schema.ts",
-    "./payment": "./src/payment/schema.ts"
-  },
+  "main": "src/index.ts",
   "scripts": {
-    "lint": "biome check .",
-    "check-types": "tsc --noEmit",
-    "test": "bun test",
-    "generate:auth": "drizzle-kit generate --config drizzle.auth.config.ts",
-    "generate:event": "drizzle-kit generate --config drizzle.event.config.ts",
-    "generate:registration": "drizzle-kit generate --config drizzle.registration.config.ts",
-    "generate:payment": "drizzle-kit generate --config drizzle.payment.config.ts",
-    "db:bootstrap": "bun scripts/bootstrap.ts",
-    "db:seed": "bun scripts/seed.ts"
+    "db:generate": "bun --env-file=../../.env run drizzle-kit generate",
+    "db:migrate": "bun --env-file=../../.env run drizzle-kit migrate",
+    "db:studio": "bun --env-file=../../.env run drizzle-kit studio"
   },
   "dependencies": {
-    "drizzle-orm": "^0.45.2",
-    "postgres": "^3.4.7"
+    "drizzle-orm": "^0.45.4",
+    "postgres": "^3.4.9"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0",
-    "drizzle-kit": "^0.31.5"
+    "drizzle-kit": "^0.31.11"
   }
 }
