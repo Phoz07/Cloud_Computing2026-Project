@@ -1,0 +1,27 @@
+{
+  "name": "cloud-project",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "infra:reset": "docker compose down -v && docker compose up -d",
+    "db:generate": "bun run --filter @app/db db:generate",
+    "db:migrate": "bun run --filter @app/db db:migrate",
+    "db:studio": "bun run --filter @app/db db:studio",
+    "dev": "bun run --parallel --filter './apps/*' dev",
+    "typecheck": "bun check"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.3"
+  },
+  "peerDependencies": {
+    "typescript": "^7.0.2"
+  }
+}
