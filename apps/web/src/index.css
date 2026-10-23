@@ -135,3 +135,58 @@
     @apply font-sans;
     }
 }
+
+/* Styles for the event description: the WYSIWYG editor and the rendered (sanitized) HTML. */
+@layer components {
+  .rich-text {
+    @apply text-base leading-7;
+  }
+  /* the public page renders the HTML straight inside .rich-text; the editor wraps it in .ProseMirror */
+  .rich-text > * + *,
+  .rich-text > .ProseMirror > * + * {
+    @apply mt-3;
+  }
+  .rich-text h2 {
+    @apply text-xl font-bold;
+  }
+  .rich-text h3 {
+    @apply text-lg font-semibold;
+  }
+  .rich-text ul {
+    @apply list-disc pl-6;
+  }
+  .rich-text ol {
+    @apply list-decimal pl-6;
+  }
+  .rich-text blockquote {
+    @apply border-l-4 border-border pl-4 text-muted-foreground;
+  }
+  .rich-text a {
+    @apply text-primary underline underline-offset-2;
+  }
+  .rich-text img {
+    @apply h-auto max-w-full rounded-xl;
+  }
+  .rich-text code {
+    @apply rounded bg-muted px-1 py-0.5 font-mono text-[0.9em];
+  }
+  .rich-text pre {
+    @apply overflow-x-auto rounded-xl bg-muted p-3;
+  }
+  .rich-text hr {
+    @apply border-border;
+  }
+  .rich-text .ProseMirror img.ProseMirror-selectednode {
+    @apply ring-2 ring-ring;
+  }
+  /* Tiptap placeholder: the first empty paragraph shows the hint */
+  .rich-text .ProseMirror p.is-editor-empty:first-child::before {
+    @apply pointer-events-none float-left h-0 text-muted-foreground;
+    content: attr(data-placeholder);
+  }
+}
+
+/* While the event editor's floating save bar is up, toasts stack above it instead of covering Save. */
+body:has([data-slot="save-bar"]) [data-slot="toast-viewport"] {
+  bottom: calc(var(--spacing) * 20);
+}

@@ -1,0 +1,66 @@
+import { queryOptions } from "@tanstack/react-query";
+import { AlignLeft, ListChecks, MailCheck, TextCursorInput, UserCheck, Zap, type LucideIcon } from "lucide-react";
+import { eventClient } from "./api";
+import { retryUnlessClientError } from "./events";
+
+export type TicketKind = "first_come" | "approval" | "invite";
+export type QuestionType = "short_text" | "long_text" | "choice";
+
+export const kindInfo: Record<TicketKind, { label: string; description: string; icon: LucideIcon }> = {
+  first_come: {
+    label: "มาก่อนได้ก่อน",
+    description: "กำหนดจำนวนตั๋ว ผู้ที่ลงทะเบียนครบก่อนได้ตั๋วทันทีจนกว่าจะเต็ม",
+    icon: Zap,
+  },
+  approval: {
+    label: "ต้องได้รับอนุมัติ",
+    description: "ผู้สนใจส่งคำขอ คุณเลือกอนุมัติทีละรายการ ไม่จำกัดจำนวนคำขอ",
+    icon: UserCheck,
+  },
+  invite: {
+    label: "เฉพาะผู้ได้รับเชิญ",
+    description: "ลงทะเบียนได้เฉพาะอีเมลในรายชื่อผู้ได้รับเชิญ คำเชิญละ 1 ครั้ง",
+    icon: MailCheck,
+  },
+};
+
+export const questionTypeInfo: Record<QuestionType, { label: string; icon: LucideIcon }> = {
+  short_text: { label: "ข้อความสั้น", icon: TextCursorInput },
+  long_text: { label: "ข้อความยาว", icon: AlignLeft },
+  choice: { label: "ตัวเลือก", icon: ListChecks },
+};
+
+/** The services' limits (apps/event ticket-types model, apps/registration). */
+export const MIN_PAID_PRICE = 20;
+export const MAX_QUESTIONS = 30;
+export const MAX_OPTIONS = 20;
+export const SHORT_TEXT_MAX = 200;
+export const LONG_TEXT_MAX = 2000;
+
+export const ticketTypesKey = (eventId: string) => ["ticket-types", eventId] as const;
+
+// the id may also be a slug
+export const ticketTypesQueryOptions = (idOrSlug: string) =>
+  queryOptions({
+    queryKey: ticketTypesKey(idOrSlug),
+    queryFn: async () => {
+      const { data, error } = await eventClient.api.events({ id: idOrSlug })["ticket-types"].get();
+      if (error) throw error;
+      return data;
+    },
+    retry: retryUnlessClientError,
+  });
+
+export type TicketType = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof eventClient.api.events>["ticket-types"]["get"]>>["data"]
+>[number];
+
+export type Question = TicketType["questions"][number];
+
+/** Field each of the event service's problem codes belongs to, so the editor shows it in place. */
+export const ticketTypeProblemFields: Record<string, string> = {
+  INVALID_PRICE: "price",
+  INVALID_QUOTA: "quota",
+  QUOTA_BELOW_TAKEN: "quota",
+  KIND_LOCKED: "kind",
+};

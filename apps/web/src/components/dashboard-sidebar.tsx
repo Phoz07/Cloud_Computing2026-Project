@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { CalendarDays, ClipboardCheck, LayoutDashboard, UserRound, Users, type LucideIcon } from "lucide-react";
+import { CalendarDays, ClipboardCheck, LayoutDashboard, Tags, UserRound, Users, type LucideIcon } from "lucide-react";
 import type { Role } from "@app/auth-guard/permissions";
 import {
   Sidebar,
@@ -19,7 +19,7 @@ import { hasRole, useSession } from "@/lib/session";
 
 type NavItem = {
   title: string;
-  to: "/dashboard" | "/dashboard/events" | "/dashboard/users" | "/dashboard/applications" | "/profile";
+  to: "/dashboard" | "/dashboard/events" | "/dashboard/categories" | "/dashboard/users" | "/dashboard/applications" | "/profile";
   icon: LucideIcon;
 };
 
@@ -41,11 +41,18 @@ const sections: { label: string; roles: Role[]; items: NavItem[] }[] = [
     label: "ผู้ดูแลระบบ",
     roles: ["admin"],
     items: [
+      { title: "หมวดหมู่อีเวนต์", to: "/dashboard/categories", icon: Tags },
       { title: "ผู้ใช้", to: "/dashboard/users", icon: Users },
       { title: "คำขอเป็นผู้จัดงาน", to: "/dashboard/applications", icon: ClipboardCheck },
     ],
   },
 ];
+
+// nested pages (e.g. editing an event) keep their section highlighted; the overview matches exactly
+const isActive = (pathname: string, to: string) => {
+  const path = pathname.replace(/\/$/, "");
+  return path === to || (to !== "/dashboard" && path.startsWith(`${to}/`));
+};
 
 export function DashboardSidebar() {
   const { data: session } = useSession();
@@ -68,7 +75,7 @@ export function DashboardSidebar() {
                   {section.items.map((item) => (
                     <SidebarMenuItem key={item.to}>
                       <SidebarMenuButton
-                        isActive={pathname.replace(/\/$/, "") === item.to}
+                        isActive={isActive(pathname, item.to)}
                         render={<Link to={item.to} onClick={() => setOpenMobile(false)} />}
                       >
                         <item.icon />

@@ -2,7 +2,6 @@ import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowRight,
-  CalendarDays,
   ClipboardCheck,
   LayoutDashboard,
   Megaphone,
@@ -11,17 +10,18 @@ import {
 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { userCountQueryOptions } from "@/lib/admin-users";
 import { pendingApplicationsQueryOptions } from "@/lib/organizer-applications";
 import { hasRole, useSession } from "@/lib/session";
-import { NoEventsYet } from "./-components/no-events-yet";
+import { RecentEvents } from "./-components/recent-events";
 
 export const Route = createFileRoute("/_authed/dashboard/")({ component: Overview });
 
 function Overview() {
   const { data: session } = useSession();
+  const isAdmin = hasRole(session?.user, ["admin"]);
 
   return (
     <>
@@ -30,7 +30,7 @@ function Overview() {
         title="ภาพรวม"
         description={session ? `สวัสดีคุณ ${session.user.name}` : undefined}
       />
-      {hasRole(session?.user, ["admin"]) && (
+      {isAdmin && (
         <div className="grid gap-4 md:grid-cols-3">
           <StatCard
             icon={Users}
@@ -52,18 +52,7 @@ function Overview() {
           />
         </div>
       )}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CalendarDays className="size-5 text-primary" />
-            อีเวนต์ของฉัน
-          </CardTitle>
-          <CardDescription>อีเวนต์ที่คุณสร้างจะแสดงที่นี่พร้อมยอดขายและการเช็คอิน</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <NoEventsYet />
-        </CardContent>
-      </Card>
+      <RecentEvents title={isAdmin ? "อีเวนต์ล่าสุด" : "อีเวนต์ของฉัน"} />
     </>
   );
 }

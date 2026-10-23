@@ -15,17 +15,36 @@ import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as StatusRouteImport } from './routes/status'
 import { Route as AuthedDashboardRouteImport } from './routes/_authed/dashboard'
 import { Route as AuthedProfileRouteImport } from './routes/_authed/profile'
+import { Route as EventsSlugRouteImport } from './routes/events/$slug'
+import { Route as EventsBrowseRouteImport } from './routes/events/_browse'
 import { Route as AuthedDashboardIndexRouteImport } from './routes/_authed/dashboard/index'
 import { Route as AuthedDashboardApplicationsRouteImport } from './routes/_authed/dashboard/applications'
-import { Route as AuthedDashboardEventsRouteImport } from './routes/_authed/dashboard/events'
+import { Route as AuthedDashboardCategoriesRouteImport } from './routes/_authed/dashboard/categories'
 import { Route as AuthedDashboardUsersRouteImport } from './routes/_authed/dashboard/users'
 import { Route as AuthedProfileIndexRouteImport } from './routes/_authed/profile/index'
 import { Route as AuthedProfileDeleteRouteImport } from './routes/_authed/profile/delete'
 import { Route as AuthedProfileOrganizerRouteImport } from './routes/_authed/profile/organizer'
 import { Route as AuthedProfileSessionsRouteImport } from './routes/_authed/profile/sessions'
 import { Route as AuthedProfileSignInRouteImport } from './routes/_authed/profile/sign-in'
+import { Route as AuthedTicketsIndexRouteImport } from './routes/_authed/tickets/index'
+import { Route as AuthedTicketsTicketIdRouteImport } from './routes/_authed/tickets/$ticketId'
+import { Route as EventsBrowseIndexRouteImport } from './routes/events/_browse/index'
+import { Route as AuthedDashboardEventsIndexRouteImport } from './routes/_authed/dashboard/events/index'
+import { Route as AuthedDashboardEventsEventIdRouteRouteImport } from './routes/_authed/dashboard/events/$eventId/route'
+import { Route as AuthedDashboardEventsNewRouteImport } from './routes/_authed/dashboard/events/new'
+import { Route as AuthedTicketsOrdersEnrollmentIdRouteImport } from './routes/_authed/tickets/orders/$enrollmentId'
+import { Route as EventsBrowseCategoriesCategoryRouteImport } from './routes/events/_browse/categories.$category'
+import { Route as AuthedDashboardEventsEventIdIndexRouteImport } from './routes/_authed/dashboard/events/$eventId/index'
+import { Route as AuthedDashboardEventsEventIdInvitationsRouteImport } from './routes/_authed/dashboard/events/$eventId/invitations'
+import { Route as AuthedDashboardEventsEventIdParticipantsRouteImport } from './routes/_authed/dashboard/events/$eventId/participants'
+import { Route as AuthedDashboardEventsEventIdRefundsRouteImport } from './routes/_authed/dashboard/events/$eventId/refunds'
+import { Route as AuthedEventsSlugEnrollTicketTypeIdRouteImport } from './routes/_authed/events/$slug/enroll/$ticketTypeId'
+import { Route as AuthedDashboardEventsEventIdTicketsIndexRouteImport } from './routes/_authed/dashboard/events/$eventId/tickets/index'
+import { Route as AuthedDashboardEventsEventIdTicketsTicketTypeIdRouteImport } from './routes/_authed/dashboard/events/$eventId/tickets/$ticketTypeId'
+import { Route as AuthedDashboardEventsEventIdTicketsNewRouteImport } from './routes/_authed/dashboard/events/$eventId/tickets/new'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -56,6 +75,11 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
   path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StatusRoute = StatusRouteImport.update({
+  id: '/status',
+  path: '/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthedDashboardRoute = AuthedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -65,6 +89,16 @@ const AuthedProfileRoute = AuthedProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
   getParentRoute: () => AuthedRoute,
+} as any)
+const EventsSlugRoute = EventsSlugRouteImport.update({
+  id: '/events/$slug',
+  path: '/events/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EventsBrowseRoute = EventsBrowseRouteImport.update({
+  id: '/events/_browse',
+  path: '/events',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthedDashboardIndexRoute = AuthedDashboardIndexRouteImport.update({
   id: '/',
@@ -77,11 +111,12 @@ const AuthedDashboardApplicationsRoute =
     path: '/applications',
     getParentRoute: () => AuthedDashboardRoute,
   } as any)
-const AuthedDashboardEventsRoute = AuthedDashboardEventsRouteImport.update({
-  id: '/events',
-  path: '/events',
-  getParentRoute: () => AuthedDashboardRoute,
-} as any)
+const AuthedDashboardCategoriesRoute =
+  AuthedDashboardCategoriesRouteImport.update({
+    id: '/categories',
+    path: '/categories',
+    getParentRoute: () => AuthedDashboardRoute,
+  } as any)
 const AuthedDashboardUsersRoute = AuthedDashboardUsersRouteImport.update({
   id: '/users',
   path: '/users',
@@ -112,6 +147,99 @@ const AuthedProfileSignInRoute = AuthedProfileSignInRouteImport.update({
   path: '/sign-in',
   getParentRoute: () => AuthedProfileRoute,
 } as any)
+const AuthedTicketsIndexRoute = AuthedTicketsIndexRouteImport.update({
+  id: '/tickets/',
+  path: '/tickets/',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedTicketsTicketIdRoute = AuthedTicketsTicketIdRouteImport.update({
+  id: '/tickets/$ticketId',
+  path: '/tickets/$ticketId',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const EventsBrowseIndexRoute = EventsBrowseIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => EventsBrowseRoute,
+} as any)
+const AuthedDashboardEventsIndexRoute =
+  AuthedDashboardEventsIndexRouteImport.update({
+    id: '/events/',
+    path: '/events/',
+    getParentRoute: () => AuthedDashboardRoute,
+  } as any)
+const AuthedDashboardEventsEventIdRouteRoute =
+  AuthedDashboardEventsEventIdRouteRouteImport.update({
+    id: '/events/$eventId',
+    path: '/events/$eventId',
+    getParentRoute: () => AuthedDashboardRoute,
+  } as any)
+const AuthedDashboardEventsNewRoute =
+  AuthedDashboardEventsNewRouteImport.update({
+    id: '/events/new',
+    path: '/events/new',
+    getParentRoute: () => AuthedDashboardRoute,
+  } as any)
+const AuthedTicketsOrdersEnrollmentIdRoute =
+  AuthedTicketsOrdersEnrollmentIdRouteImport.update({
+    id: '/tickets/orders/$enrollmentId',
+    path: '/tickets/orders/$enrollmentId',
+    getParentRoute: () => AuthedRoute,
+  } as any)
+const EventsBrowseCategoriesCategoryRoute =
+  EventsBrowseCategoriesCategoryRouteImport.update({
+    id: '/categories/$category',
+    path: '/categories/$category',
+    getParentRoute: () => EventsBrowseRoute,
+  } as any)
+const AuthedDashboardEventsEventIdIndexRoute =
+  AuthedDashboardEventsEventIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthedDashboardEventsEventIdRouteRoute,
+  } as any)
+const AuthedDashboardEventsEventIdInvitationsRoute =
+  AuthedDashboardEventsEventIdInvitationsRouteImport.update({
+    id: '/invitations',
+    path: '/invitations',
+    getParentRoute: () => AuthedDashboardEventsEventIdRouteRoute,
+  } as any)
+const AuthedDashboardEventsEventIdParticipantsRoute =
+  AuthedDashboardEventsEventIdParticipantsRouteImport.update({
+    id: '/participants',
+    path: '/participants',
+    getParentRoute: () => AuthedDashboardEventsEventIdRouteRoute,
+  } as any)
+const AuthedDashboardEventsEventIdRefundsRoute =
+  AuthedDashboardEventsEventIdRefundsRouteImport.update({
+    id: '/refunds',
+    path: '/refunds',
+    getParentRoute: () => AuthedDashboardEventsEventIdRouteRoute,
+  } as any)
+const AuthedEventsSlugEnrollTicketTypeIdRoute =
+  AuthedEventsSlugEnrollTicketTypeIdRouteImport.update({
+    id: '/events/$slug/enroll/$ticketTypeId',
+    path: '/events/$slug/enroll/$ticketTypeId',
+    getParentRoute: () => AuthedRoute,
+  } as any)
+const AuthedDashboardEventsEventIdTicketsIndexRoute =
+  AuthedDashboardEventsEventIdTicketsIndexRouteImport.update({
+    id: '/tickets/',
+    path: '/tickets/',
+    getParentRoute: () => AuthedDashboardEventsEventIdRouteRoute,
+  } as any)
+const AuthedDashboardEventsEventIdTicketsTicketTypeIdRoute =
+  AuthedDashboardEventsEventIdTicketsTicketTypeIdRouteImport.update({
+    id: '/tickets/$ticketTypeId',
+    path: '/tickets/$ticketTypeId',
+    getParentRoute: () => AuthedDashboardEventsEventIdRouteRoute,
+  } as any)
+const AuthedDashboardEventsEventIdTicketsNewRoute =
+  AuthedDashboardEventsEventIdTicketsNewRouteImport.update({
+    id: '/tickets/new',
+    path: '/tickets/new',
+    getParentRoute: () => AuthedDashboardEventsEventIdRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -119,17 +247,36 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/status': typeof StatusRoute
   '/dashboard': typeof AuthedDashboardRouteWithChildren
   '/profile': typeof AuthedProfileRouteWithChildren
+  '/events/$slug': typeof EventsSlugRoute
+  '/events': typeof EventsBrowseRouteWithChildren
   '/dashboard/applications': typeof AuthedDashboardApplicationsRoute
-  '/dashboard/events': typeof AuthedDashboardEventsRoute
+  '/dashboard/categories': typeof AuthedDashboardCategoriesRoute
   '/dashboard/users': typeof AuthedDashboardUsersRoute
   '/profile/delete': typeof AuthedProfileDeleteRoute
   '/profile/organizer': typeof AuthedProfileOrganizerRoute
   '/profile/sessions': typeof AuthedProfileSessionsRoute
   '/profile/sign-in': typeof AuthedProfileSignInRoute
+  '/tickets/$ticketId': typeof AuthedTicketsTicketIdRoute
   '/dashboard/': typeof AuthedDashboardIndexRoute
   '/profile/': typeof AuthedProfileIndexRoute
+  '/tickets/': typeof AuthedTicketsIndexRoute
+  '/events/': typeof EventsBrowseIndexRoute
+  '/dashboard/events/$eventId': typeof AuthedDashboardEventsEventIdRouteRouteWithChildren
+  '/dashboard/events/new': typeof AuthedDashboardEventsNewRoute
+  '/tickets/orders/$enrollmentId': typeof AuthedTicketsOrdersEnrollmentIdRoute
+  '/events/categories/$category': typeof EventsBrowseCategoriesCategoryRoute
+  '/dashboard/events/': typeof AuthedDashboardEventsIndexRoute
+  '/dashboard/events/$eventId/invitations': typeof AuthedDashboardEventsEventIdInvitationsRoute
+  '/dashboard/events/$eventId/participants': typeof AuthedDashboardEventsEventIdParticipantsRoute
+  '/dashboard/events/$eventId/refunds': typeof AuthedDashboardEventsEventIdRefundsRoute
+  '/events/$slug/enroll/$ticketTypeId': typeof AuthedEventsSlugEnrollTicketTypeIdRoute
+  '/dashboard/events/$eventId/': typeof AuthedDashboardEventsEventIdIndexRoute
+  '/dashboard/events/$eventId/tickets/$ticketTypeId': typeof AuthedDashboardEventsEventIdTicketsTicketTypeIdRoute
+  '/dashboard/events/$eventId/tickets/new': typeof AuthedDashboardEventsEventIdTicketsNewRoute
+  '/dashboard/events/$eventId/tickets/': typeof AuthedDashboardEventsEventIdTicketsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -137,15 +284,32 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/status': typeof StatusRoute
+  '/events/$slug': typeof EventsSlugRoute
   '/dashboard/applications': typeof AuthedDashboardApplicationsRoute
-  '/dashboard/events': typeof AuthedDashboardEventsRoute
+  '/dashboard/categories': typeof AuthedDashboardCategoriesRoute
   '/dashboard/users': typeof AuthedDashboardUsersRoute
   '/profile/delete': typeof AuthedProfileDeleteRoute
   '/profile/organizer': typeof AuthedProfileOrganizerRoute
   '/profile/sessions': typeof AuthedProfileSessionsRoute
   '/profile/sign-in': typeof AuthedProfileSignInRoute
+  '/tickets/$ticketId': typeof AuthedTicketsTicketIdRoute
   '/dashboard': typeof AuthedDashboardIndexRoute
   '/profile': typeof AuthedProfileIndexRoute
+  '/tickets': typeof AuthedTicketsIndexRoute
+  '/events': typeof EventsBrowseIndexRoute
+  '/dashboard/events/new': typeof AuthedDashboardEventsNewRoute
+  '/tickets/orders/$enrollmentId': typeof AuthedTicketsOrdersEnrollmentIdRoute
+  '/events/categories/$category': typeof EventsBrowseCategoriesCategoryRoute
+  '/dashboard/events': typeof AuthedDashboardEventsIndexRoute
+  '/dashboard/events/$eventId/invitations': typeof AuthedDashboardEventsEventIdInvitationsRoute
+  '/dashboard/events/$eventId/participants': typeof AuthedDashboardEventsEventIdParticipantsRoute
+  '/dashboard/events/$eventId/refunds': typeof AuthedDashboardEventsEventIdRefundsRoute
+  '/events/$slug/enroll/$ticketTypeId': typeof AuthedEventsSlugEnrollTicketTypeIdRoute
+  '/dashboard/events/$eventId': typeof AuthedDashboardEventsEventIdIndexRoute
+  '/dashboard/events/$eventId/tickets/$ticketTypeId': typeof AuthedDashboardEventsEventIdTicketsTicketTypeIdRoute
+  '/dashboard/events/$eventId/tickets/new': typeof AuthedDashboardEventsEventIdTicketsNewRoute
+  '/dashboard/events/$eventId/tickets': typeof AuthedDashboardEventsEventIdTicketsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -155,17 +319,36 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/status': typeof StatusRoute
   '/_authed/dashboard': typeof AuthedDashboardRouteWithChildren
   '/_authed/profile': typeof AuthedProfileRouteWithChildren
+  '/events/$slug': typeof EventsSlugRoute
+  '/events/_browse': typeof EventsBrowseRouteWithChildren
   '/_authed/dashboard/applications': typeof AuthedDashboardApplicationsRoute
-  '/_authed/dashboard/events': typeof AuthedDashboardEventsRoute
+  '/_authed/dashboard/categories': typeof AuthedDashboardCategoriesRoute
   '/_authed/dashboard/users': typeof AuthedDashboardUsersRoute
   '/_authed/profile/delete': typeof AuthedProfileDeleteRoute
   '/_authed/profile/organizer': typeof AuthedProfileOrganizerRoute
   '/_authed/profile/sessions': typeof AuthedProfileSessionsRoute
   '/_authed/profile/sign-in': typeof AuthedProfileSignInRoute
+  '/_authed/tickets/$ticketId': typeof AuthedTicketsTicketIdRoute
   '/_authed/dashboard/': typeof AuthedDashboardIndexRoute
   '/_authed/profile/': typeof AuthedProfileIndexRoute
+  '/_authed/tickets/': typeof AuthedTicketsIndexRoute
+  '/events/_browse/': typeof EventsBrowseIndexRoute
+  '/_authed/dashboard/events/$eventId': typeof AuthedDashboardEventsEventIdRouteRouteWithChildren
+  '/_authed/dashboard/events/new': typeof AuthedDashboardEventsNewRoute
+  '/_authed/tickets/orders/$enrollmentId': typeof AuthedTicketsOrdersEnrollmentIdRoute
+  '/events/_browse/categories/$category': typeof EventsBrowseCategoriesCategoryRoute
+  '/_authed/dashboard/events/': typeof AuthedDashboardEventsIndexRoute
+  '/_authed/dashboard/events/$eventId/invitations': typeof AuthedDashboardEventsEventIdInvitationsRoute
+  '/_authed/dashboard/events/$eventId/participants': typeof AuthedDashboardEventsEventIdParticipantsRoute
+  '/_authed/dashboard/events/$eventId/refunds': typeof AuthedDashboardEventsEventIdRefundsRoute
+  '/_authed/events/$slug/enroll/$ticketTypeId': typeof AuthedEventsSlugEnrollTicketTypeIdRoute
+  '/_authed/dashboard/events/$eventId/': typeof AuthedDashboardEventsEventIdIndexRoute
+  '/_authed/dashboard/events/$eventId/tickets/$ticketTypeId': typeof AuthedDashboardEventsEventIdTicketsTicketTypeIdRoute
+  '/_authed/dashboard/events/$eventId/tickets/new': typeof AuthedDashboardEventsEventIdTicketsNewRoute
+  '/_authed/dashboard/events/$eventId/tickets/': typeof AuthedDashboardEventsEventIdTicketsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -175,17 +358,36 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/reset-password'
+    | '/status'
     | '/dashboard'
     | '/profile'
+    | '/events/$slug'
+    | '/events'
     | '/dashboard/applications'
-    | '/dashboard/events'
+    | '/dashboard/categories'
     | '/dashboard/users'
     | '/profile/delete'
     | '/profile/organizer'
     | '/profile/sessions'
     | '/profile/sign-in'
+    | '/tickets/$ticketId'
     | '/dashboard/'
     | '/profile/'
+    | '/tickets/'
+    | '/events/'
+    | '/dashboard/events/$eventId'
+    | '/dashboard/events/new'
+    | '/tickets/orders/$enrollmentId'
+    | '/events/categories/$category'
+    | '/dashboard/events/'
+    | '/dashboard/events/$eventId/invitations'
+    | '/dashboard/events/$eventId/participants'
+    | '/dashboard/events/$eventId/refunds'
+    | '/events/$slug/enroll/$ticketTypeId'
+    | '/dashboard/events/$eventId/'
+    | '/dashboard/events/$eventId/tickets/$ticketTypeId'
+    | '/dashboard/events/$eventId/tickets/new'
+    | '/dashboard/events/$eventId/tickets/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -193,15 +395,32 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/reset-password'
+    | '/status'
+    | '/events/$slug'
     | '/dashboard/applications'
-    | '/dashboard/events'
+    | '/dashboard/categories'
     | '/dashboard/users'
     | '/profile/delete'
     | '/profile/organizer'
     | '/profile/sessions'
     | '/profile/sign-in'
+    | '/tickets/$ticketId'
     | '/dashboard'
     | '/profile'
+    | '/tickets'
+    | '/events'
+    | '/dashboard/events/new'
+    | '/tickets/orders/$enrollmentId'
+    | '/events/categories/$category'
+    | '/dashboard/events'
+    | '/dashboard/events/$eventId/invitations'
+    | '/dashboard/events/$eventId/participants'
+    | '/dashboard/events/$eventId/refunds'
+    | '/events/$slug/enroll/$ticketTypeId'
+    | '/dashboard/events/$eventId'
+    | '/dashboard/events/$eventId/tickets/$ticketTypeId'
+    | '/dashboard/events/$eventId/tickets/new'
+    | '/dashboard/events/$eventId/tickets'
   id:
     | '__root__'
     | '/'
@@ -210,17 +429,36 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/reset-password'
+    | '/status'
     | '/_authed/dashboard'
     | '/_authed/profile'
+    | '/events/$slug'
+    | '/events/_browse'
     | '/_authed/dashboard/applications'
-    | '/_authed/dashboard/events'
+    | '/_authed/dashboard/categories'
     | '/_authed/dashboard/users'
     | '/_authed/profile/delete'
     | '/_authed/profile/organizer'
     | '/_authed/profile/sessions'
     | '/_authed/profile/sign-in'
+    | '/_authed/tickets/$ticketId'
     | '/_authed/dashboard/'
     | '/_authed/profile/'
+    | '/_authed/tickets/'
+    | '/events/_browse/'
+    | '/_authed/dashboard/events/$eventId'
+    | '/_authed/dashboard/events/new'
+    | '/_authed/tickets/orders/$enrollmentId'
+    | '/events/_browse/categories/$category'
+    | '/_authed/dashboard/events/'
+    | '/_authed/dashboard/events/$eventId/invitations'
+    | '/_authed/dashboard/events/$eventId/participants'
+    | '/_authed/dashboard/events/$eventId/refunds'
+    | '/_authed/events/$slug/enroll/$ticketTypeId'
+    | '/_authed/dashboard/events/$eventId/'
+    | '/_authed/dashboard/events/$eventId/tickets/$ticketTypeId'
+    | '/_authed/dashboard/events/$eventId/tickets/new'
+    | '/_authed/dashboard/events/$eventId/tickets/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -230,6 +468,9 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  StatusRoute: typeof StatusRoute
+  EventsSlugRoute: typeof EventsSlugRoute
+  EventsBrowseRoute: typeof EventsBrowseRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -276,6 +517,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/status': {
+      id: '/status'
+      path: '/status'
+      fullPath: '/status'
+      preLoaderRoute: typeof StatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authed/dashboard': {
       id: '/_authed/dashboard'
       path: '/dashboard'
@@ -289,6 +537,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/profile'
       preLoaderRoute: typeof AuthedProfileRouteImport
       parentRoute: typeof AuthedRoute
+    }
+    '/events/$slug': {
+      id: '/events/$slug'
+      path: '/events/$slug'
+      fullPath: '/events/$slug'
+      preLoaderRoute: typeof EventsSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/events/_browse': {
+      id: '/events/_browse'
+      path: '/events'
+      fullPath: '/events'
+      preLoaderRoute: typeof EventsBrowseRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authed/dashboard/': {
       id: '/_authed/dashboard/'
@@ -304,11 +566,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedDashboardApplicationsRouteImport
       parentRoute: typeof AuthedDashboardRoute
     }
-    '/_authed/dashboard/events': {
-      id: '/_authed/dashboard/events'
-      path: '/events'
-      fullPath: '/dashboard/events'
-      preLoaderRoute: typeof AuthedDashboardEventsRouteImport
+    '/_authed/dashboard/categories': {
+      id: '/_authed/dashboard/categories'
+      path: '/categories'
+      fullPath: '/dashboard/categories'
+      preLoaderRoute: typeof AuthedDashboardCategoriesRouteImport
       parentRoute: typeof AuthedDashboardRoute
     }
     '/_authed/dashboard/users': {
@@ -353,21 +615,173 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedProfileSignInRouteImport
       parentRoute: typeof AuthedProfileRoute
     }
+    '/_authed/tickets/': {
+      id: '/_authed/tickets/'
+      path: '/tickets'
+      fullPath: '/tickets/'
+      preLoaderRoute: typeof AuthedTicketsIndexRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/tickets/$ticketId': {
+      id: '/_authed/tickets/$ticketId'
+      path: '/tickets/$ticketId'
+      fullPath: '/tickets/$ticketId'
+      preLoaderRoute: typeof AuthedTicketsTicketIdRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/events/_browse/': {
+      id: '/events/_browse/'
+      path: '/'
+      fullPath: '/events/'
+      preLoaderRoute: typeof EventsBrowseIndexRouteImport
+      parentRoute: typeof EventsBrowseRoute
+    }
+    '/_authed/dashboard/events/': {
+      id: '/_authed/dashboard/events/'
+      path: '/events'
+      fullPath: '/dashboard/events/'
+      preLoaderRoute: typeof AuthedDashboardEventsIndexRouteImport
+      parentRoute: typeof AuthedDashboardRoute
+    }
+    '/_authed/dashboard/events/$eventId': {
+      id: '/_authed/dashboard/events/$eventId'
+      path: '/events/$eventId'
+      fullPath: '/dashboard/events/$eventId'
+      preLoaderRoute: typeof AuthedDashboardEventsEventIdRouteRouteImport
+      parentRoute: typeof AuthedDashboardRoute
+    }
+    '/_authed/dashboard/events/new': {
+      id: '/_authed/dashboard/events/new'
+      path: '/events/new'
+      fullPath: '/dashboard/events/new'
+      preLoaderRoute: typeof AuthedDashboardEventsNewRouteImport
+      parentRoute: typeof AuthedDashboardRoute
+    }
+    '/_authed/tickets/orders/$enrollmentId': {
+      id: '/_authed/tickets/orders/$enrollmentId'
+      path: '/tickets/orders/$enrollmentId'
+      fullPath: '/tickets/orders/$enrollmentId'
+      preLoaderRoute: typeof AuthedTicketsOrdersEnrollmentIdRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/events/_browse/categories/$category': {
+      id: '/events/_browse/categories/$category'
+      path: '/categories/$category'
+      fullPath: '/events/categories/$category'
+      preLoaderRoute: typeof EventsBrowseCategoriesCategoryRouteImport
+      parentRoute: typeof EventsBrowseRoute
+    }
+    '/_authed/dashboard/events/$eventId/': {
+      id: '/_authed/dashboard/events/$eventId/'
+      path: '/'
+      fullPath: '/dashboard/events/$eventId/'
+      preLoaderRoute: typeof AuthedDashboardEventsEventIdIndexRouteImport
+      parentRoute: typeof AuthedDashboardEventsEventIdRouteRoute
+    }
+    '/_authed/dashboard/events/$eventId/invitations': {
+      id: '/_authed/dashboard/events/$eventId/invitations'
+      path: '/invitations'
+      fullPath: '/dashboard/events/$eventId/invitations'
+      preLoaderRoute: typeof AuthedDashboardEventsEventIdInvitationsRouteImport
+      parentRoute: typeof AuthedDashboardEventsEventIdRouteRoute
+    }
+    '/_authed/dashboard/events/$eventId/participants': {
+      id: '/_authed/dashboard/events/$eventId/participants'
+      path: '/participants'
+      fullPath: '/dashboard/events/$eventId/participants'
+      preLoaderRoute: typeof AuthedDashboardEventsEventIdParticipantsRouteImport
+      parentRoute: typeof AuthedDashboardEventsEventIdRouteRoute
+    }
+    '/_authed/dashboard/events/$eventId/refunds': {
+      id: '/_authed/dashboard/events/$eventId/refunds'
+      path: '/refunds'
+      fullPath: '/dashboard/events/$eventId/refunds'
+      preLoaderRoute: typeof AuthedDashboardEventsEventIdRefundsRouteImport
+      parentRoute: typeof AuthedDashboardEventsEventIdRouteRoute
+    }
+    '/_authed/events/$slug/enroll/$ticketTypeId': {
+      id: '/_authed/events/$slug/enroll/$ticketTypeId'
+      path: '/events/$slug/enroll/$ticketTypeId'
+      fullPath: '/events/$slug/enroll/$ticketTypeId'
+      preLoaderRoute: typeof AuthedEventsSlugEnrollTicketTypeIdRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/dashboard/events/$eventId/tickets/': {
+      id: '/_authed/dashboard/events/$eventId/tickets/'
+      path: '/tickets'
+      fullPath: '/dashboard/events/$eventId/tickets/'
+      preLoaderRoute: typeof AuthedDashboardEventsEventIdTicketsIndexRouteImport
+      parentRoute: typeof AuthedDashboardEventsEventIdRouteRoute
+    }
+    '/_authed/dashboard/events/$eventId/tickets/$ticketTypeId': {
+      id: '/_authed/dashboard/events/$eventId/tickets/$ticketTypeId'
+      path: '/tickets/$ticketTypeId'
+      fullPath: '/dashboard/events/$eventId/tickets/$ticketTypeId'
+      preLoaderRoute: typeof AuthedDashboardEventsEventIdTicketsTicketTypeIdRouteImport
+      parentRoute: typeof AuthedDashboardEventsEventIdRouteRoute
+    }
+    '/_authed/dashboard/events/$eventId/tickets/new': {
+      id: '/_authed/dashboard/events/$eventId/tickets/new'
+      path: '/tickets/new'
+      fullPath: '/dashboard/events/$eventId/tickets/new'
+      preLoaderRoute: typeof AuthedDashboardEventsEventIdTicketsNewRouteImport
+      parentRoute: typeof AuthedDashboardEventsEventIdRouteRoute
+    }
   }
 }
 
+interface AuthedDashboardEventsEventIdRouteRouteChildren {
+  AuthedDashboardEventsEventIdInvitationsRoute: typeof AuthedDashboardEventsEventIdInvitationsRoute
+  AuthedDashboardEventsEventIdParticipantsRoute: typeof AuthedDashboardEventsEventIdParticipantsRoute
+  AuthedDashboardEventsEventIdRefundsRoute: typeof AuthedDashboardEventsEventIdRefundsRoute
+  AuthedDashboardEventsEventIdIndexRoute: typeof AuthedDashboardEventsEventIdIndexRoute
+  AuthedDashboardEventsEventIdTicketsTicketTypeIdRoute: typeof AuthedDashboardEventsEventIdTicketsTicketTypeIdRoute
+  AuthedDashboardEventsEventIdTicketsNewRoute: typeof AuthedDashboardEventsEventIdTicketsNewRoute
+  AuthedDashboardEventsEventIdTicketsIndexRoute: typeof AuthedDashboardEventsEventIdTicketsIndexRoute
+}
+
+const AuthedDashboardEventsEventIdRouteRouteChildren: AuthedDashboardEventsEventIdRouteRouteChildren =
+  {
+    AuthedDashboardEventsEventIdInvitationsRoute:
+      AuthedDashboardEventsEventIdInvitationsRoute,
+    AuthedDashboardEventsEventIdParticipantsRoute:
+      AuthedDashboardEventsEventIdParticipantsRoute,
+    AuthedDashboardEventsEventIdRefundsRoute:
+      AuthedDashboardEventsEventIdRefundsRoute,
+    AuthedDashboardEventsEventIdIndexRoute:
+      AuthedDashboardEventsEventIdIndexRoute,
+    AuthedDashboardEventsEventIdTicketsTicketTypeIdRoute:
+      AuthedDashboardEventsEventIdTicketsTicketTypeIdRoute,
+    AuthedDashboardEventsEventIdTicketsNewRoute:
+      AuthedDashboardEventsEventIdTicketsNewRoute,
+    AuthedDashboardEventsEventIdTicketsIndexRoute:
+      AuthedDashboardEventsEventIdTicketsIndexRoute,
+  }
+
+const AuthedDashboardEventsEventIdRouteRouteWithChildren =
+  AuthedDashboardEventsEventIdRouteRoute._addFileChildren(
+    AuthedDashboardEventsEventIdRouteRouteChildren,
+  )
+
 interface AuthedDashboardRouteChildren {
   AuthedDashboardApplicationsRoute: typeof AuthedDashboardApplicationsRoute
-  AuthedDashboardEventsRoute: typeof AuthedDashboardEventsRoute
+  AuthedDashboardCategoriesRoute: typeof AuthedDashboardCategoriesRoute
   AuthedDashboardUsersRoute: typeof AuthedDashboardUsersRoute
   AuthedDashboardIndexRoute: typeof AuthedDashboardIndexRoute
+  AuthedDashboardEventsEventIdRouteRoute: typeof AuthedDashboardEventsEventIdRouteRouteWithChildren
+  AuthedDashboardEventsNewRoute: typeof AuthedDashboardEventsNewRoute
+  AuthedDashboardEventsIndexRoute: typeof AuthedDashboardEventsIndexRoute
 }
 
 const AuthedDashboardRouteChildren: AuthedDashboardRouteChildren = {
   AuthedDashboardApplicationsRoute: AuthedDashboardApplicationsRoute,
-  AuthedDashboardEventsRoute: AuthedDashboardEventsRoute,
+  AuthedDashboardCategoriesRoute: AuthedDashboardCategoriesRoute,
   AuthedDashboardUsersRoute: AuthedDashboardUsersRoute,
   AuthedDashboardIndexRoute: AuthedDashboardIndexRoute,
+  AuthedDashboardEventsEventIdRouteRoute:
+    AuthedDashboardEventsEventIdRouteRouteWithChildren,
+  AuthedDashboardEventsNewRoute: AuthedDashboardEventsNewRoute,
+  AuthedDashboardEventsIndexRoute: AuthedDashboardEventsIndexRoute,
 }
 
 const AuthedDashboardRouteWithChildren = AuthedDashboardRoute._addFileChildren(
@@ -397,15 +811,38 @@ const AuthedProfileRouteWithChildren = AuthedProfileRoute._addFileChildren(
 interface AuthedRouteChildren {
   AuthedDashboardRoute: typeof AuthedDashboardRouteWithChildren
   AuthedProfileRoute: typeof AuthedProfileRouteWithChildren
+  AuthedTicketsTicketIdRoute: typeof AuthedTicketsTicketIdRoute
+  AuthedTicketsIndexRoute: typeof AuthedTicketsIndexRoute
+  AuthedTicketsOrdersEnrollmentIdRoute: typeof AuthedTicketsOrdersEnrollmentIdRoute
+  AuthedEventsSlugEnrollTicketTypeIdRoute: typeof AuthedEventsSlugEnrollTicketTypeIdRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedDashboardRoute: AuthedDashboardRouteWithChildren,
   AuthedProfileRoute: AuthedProfileRouteWithChildren,
+  AuthedTicketsTicketIdRoute: AuthedTicketsTicketIdRoute,
+  AuthedTicketsIndexRoute: AuthedTicketsIndexRoute,
+  AuthedTicketsOrdersEnrollmentIdRoute: AuthedTicketsOrdersEnrollmentIdRoute,
+  AuthedEventsSlugEnrollTicketTypeIdRoute:
+    AuthedEventsSlugEnrollTicketTypeIdRoute,
 }
 
 const AuthedRouteWithChildren =
   AuthedRoute._addFileChildren(AuthedRouteChildren)
+
+interface EventsBrowseRouteChildren {
+  EventsBrowseIndexRoute: typeof EventsBrowseIndexRoute
+  EventsBrowseCategoriesCategoryRoute: typeof EventsBrowseCategoriesCategoryRoute
+}
+
+const EventsBrowseRouteChildren: EventsBrowseRouteChildren = {
+  EventsBrowseIndexRoute: EventsBrowseIndexRoute,
+  EventsBrowseCategoriesCategoryRoute: EventsBrowseCategoriesCategoryRoute,
+}
+
+const EventsBrowseRouteWithChildren = EventsBrowseRoute._addFileChildren(
+  EventsBrowseRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -414,6 +851,9 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  StatusRoute: StatusRoute,
+  EventsSlugRoute: EventsSlugRoute,
+  EventsBrowseRoute: EventsBrowseRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

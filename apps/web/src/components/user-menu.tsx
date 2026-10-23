@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { LayoutDashboard, LogOut, UserRound } from "lucide-react";
+import { LayoutDashboard, LogOut, Ticket, UserRound } from "lucide-react";
 import { RoleBadge } from "@/components/role-badge";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,10 @@ export function UserMenu({ user }: { user: SessionUser }) {
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
+          <DropdownMenuItem render={<Link to="/tickets" />}>
+            <Ticket />
+            ตั๋วของฉัน
+          </DropdownMenuItem>
           <DropdownMenuItem render={<Link to="/profile" />}>
             <UserRound />
             โปรไฟล์

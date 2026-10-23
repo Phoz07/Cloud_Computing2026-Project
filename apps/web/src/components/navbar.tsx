@@ -16,7 +16,7 @@ export default function Navbar() {
           <span className="text-primary">Event</span>ide
         </Link>
         <nav className="flex items-center gap-2">
-          <Link to="/" className={cn(buttonVariants({ variant: "ghost" }), "font-bold")}>
+          <Link to="/events" className={cn(buttonVariants({ variant: "ghost" }), "font-bold")}>
             <Telescope data-icon="inline-start" />
             สำรวจ
           </Link>

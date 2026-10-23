@@ -34,7 +34,7 @@ type NavItem = {
   title: string;
   icon: LucideIcon;
   /** omitted while the page isn't built yet; the item renders disabled */
-  to?: "/profile" | "/profile/sign-in" | "/profile/sessions" | "/profile/organizer" | "/profile/delete" | "/dashboard";
+  to?: "/profile" | "/profile/sign-in" | "/profile/sessions" | "/profile/organizer" | "/profile/delete" | "/dashboard" | "/tickets";
   exact?: boolean;
   /** hidden for this role */
   hiddenForRole?: string[];
@@ -47,7 +47,7 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { title: "ข้อมูลบัญชี", to: "/profile", icon: UserRound, exact: true, group: 0 },
-  { title: "ตั๋วของฉัน", icon: Ticket, group: 0 },
+  { title: "ตั๋วของฉัน", to: "/tickets", icon: Ticket, group: 0 },
   { title: "ช่องทางเข้าสู่ระบบ", to: "/profile/sign-in", icon: LockKeyhole, group: 1 },
   { title: "อุปกรณ์ที่เข้าสู่ระบบ", to: "/profile/sessions", icon: MonitorSmartphone, group: 1 },
   { title: "แดชบอร์ดจัดการอีเวนต์", to: "/dashboard", icon: LayoutDashboard, onlyForRoles: ["organizer", "admin"], group: 2 },
