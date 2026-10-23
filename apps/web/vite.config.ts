@@ -18,10 +18,10 @@ export default defineConfig({
    server: {
      port: 5173,
      proxy: {
+       "/api/auth": "http://localhost:3001",
        "/api/events": "http://localhost:3002",
-       // "/api/auth": "http://localhost:3001",
-       // "/api/regis": "http://localhost:3003",
-       // "/api/payment": "http://localhost:3004",
+       "/api/regis": "http://localhost:3003",
+       "/api/payment": "http://localhost:3004",
      },
    },
 })

@@ -14,8 +14,12 @@ Eventide: an event ticketing website built as a Bun-workspace monorepo of micros
 
 ### Auth and email
 
-- Login is either Google social login or email/password (register + login). The Vite proxy reserves `/api/auth` → port 3001, but there is no auth service yet. The installed `better-auth-*` and `create-auth` skills cover this.
-- Email is sent by a worker using **Nodemailer with Gmail SMTP**. It consumes the SQS `mail-queue` (`MAIL_QUEUE_URL`). Services enqueue to that queue instead of sending mail inline. The worker doesn't exist yet. Add its Gmail credential variables to `.env.example` when you create it.
+- **Auth:** `apps/auth` runs Better Auth (load the `better-auth-*` skills before changing it).
+  - Login is email/password, plus Google, which is enabled only when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set.
+  - The admin plugin stores the role (`user` / `organizer` / `admin`, defined in `src/libs/permissions.ts`) on `users.role`. Suspending an account is the admin plugin's **ban**. Approving an organizer application is **set-role**.
+- **Email:** nothing sends mail inline. Producers call `enqueueMail()` from `@app/mail`, which puts a message on the SQS `mail-queue`. `apps/mail-worker` consumes the queue and sends with **Nodemailer over Gmail SMTP**.
+  - A message is deleted only after it sends. Failures are retried and land in `mail-dlq` after 5 receives.
+  - Without `GMAIL_USER` / `GMAIL_APP_PASSWORD`, the worker runs dry and logs the rendered mail instead of sending it.
 
 ## Commands
 
@@ -24,7 +28,7 @@ Use Bun for everything: `bun install`, `bun run <script>`, `bunx <pkg>`, `bun te
 ```sh
 cp .env.example .env          # one-time; every workspace reads the ROOT .env
 bun run infra:up              # start docker-compose services (infra:down to stop, infra:reset wipes volumes)
-bun run dev                   # every apps/* dev script in parallel (web :5173, event :3002)
+bun run dev                   # every apps/* dev script in parallel (web, all services, mail worker)
 bun run --filter @app/event dev   # one workspace only
 
 bun run db:generate           # generate SQL migration from schema changes -> packages/db/drizzle/
@@ -58,10 +62,20 @@ bun run --filter @app/web build   # tsc -b && vite build
 
 ### Workspaces
 
-- `apps/web` (`@app/web`): Vite + React 19 SPA. Uses TanStack Router (file-based), TanStack Query and shadcn/ui.
-- `apps/<service>` (`@app/<service>`): one Elysia service per domain, each with its own process and port. Only `event` exists so far (port 3002, prefix `/api/events`). The comments in `apps/web/vite.config.ts` reserve ports for future services: auth 3001, regis 3003, payment 3004.
+- `apps/web` (`@app/web`): Vite + React 19 SPA on :5173. Uses TanStack Router (file-based), TanStack Query and shadcn/ui.
+- One Elysia service per domain, each with its own process, port and path prefix:
+
+  | Workspace | Port | Prefix | Owns |
+  |---|---|---|---|
+  | `apps/auth` | 3001 | `/api/auth` | Better Auth: accounts, sessions, roles, bans |
+  | `apps/event` | 3002 | `/api/events` | events, ticket types, enrollment forms |
+  | `apps/registration` | 3003 | `/api/regis` | enrollments, tickets, check-in |
+  | `apps/payment` | 3004 | `/api/payment` | Stripe payments, billing, refund log |
+
+- `apps/mail-worker`: an SQS consumer with no HTTP server. It sends queued mail through Gmail.
 - `packages/db` (`@app/db`): the Drizzle schema and client that every service shares.
-- `services/*` is declared as a workspace glob but doesn't exist yet. Root `bun run dev` only starts `apps/*`.
+- `packages/mail` (`@app/mail`): the mail queue contract. It holds the `MailMessage` type, the shared `sqs` client, `enqueueMail()` for producers and `parseMailMessage()` for the worker.
+- `services/*` is declared as a workspace glob but is unused. Root `bun run dev` only starts `apps/*`.
 
 The generic Bun advice doesn't fully apply here. The web app **does** use Vite (not Bun HTML imports), and the DB layer uses Drizzle on the **postgres.js** driver (not `Bun.sql`). Elsewhere in services, prefer Bun built-ins (`Bun.redis`, `s3`, `Bun.file`, `Bun.$`).
 
@@ -73,7 +87,9 @@ The generic Bun advice doesn't fully apply here. The web app **does** use Vite (
 4. `apps/web` lists the service as a `workspace:*` **devDependency** and builds an Eden Treaty client in `src/lib/api.ts`: `treaty<App>(window.location.origin)`.
 5. Calls mirror the full path, e.g. `eventClient.api.events.health.get()`. They return `{ data, error }`, so throw `error` inside the `queryFn` so that TanStack Query sees the failure.
 
-Adding a service means touching all of these. Create `apps/<name>/package.json` with the dev script `PORT=<port> bun --env-file=../../.env --watch src/index.ts` and a dependency on `@app/db`. Add a prefixed root instance with its type exported, a proxy entry in `vite.config.ts`, the web devDependency, and a treaty client in `api.ts`.
+Adding a service means touching all of these. Create `apps/<name>/package.json` with the dev script `PORT=<port> bun --env-file=../../.env --watch src/index.ts` and a dependency on `@app/db`. Add a prefixed root instance with its type exported, a proxy entry in `vite.config.ts`, the web devDependency, and a treaty client in `api.ts`. Also add its health check to `src/routes/index.tsx`, the page that shows the status of every service.
+
+**Better Auth mounting:** don't use `.mount(auth.handler)` inside the prefixed instance. `.mount()` strips the prefix, so Better Auth, which routes on the full `/api/auth/*` path, returns 404. `apps/auth/src/index.ts` forwards the request untouched with `.all('/*', { parse: 'none' }, ({ request }) => auth.handler(request))`. Better Auth's `baseURL` (`BETTER_AUTH_URL`) is the browser-facing origin, i.e. the Vite server in dev, not port 3001.
 
 ### Backend: Elysia 2
 
@@ -106,6 +122,10 @@ test/<feature>.test.ts
 - Every table spreads `id()` (uuid, `defaultRandom`) and `...timestamps` (`created_at` / `updated_at` with `$onUpdate`) from `_columns.ts`. Use snake_case SQL column names and camelCase TS keys.
 - Services import `db`, the tables and the query operators (`eq`, `and`, `sql`, …) from `@app/db`. If you need a new operator, add it to the re-export list in `packages/db/src/index.ts` instead of adding `drizzle-orm` to a service.
 - Store S3 object **keys**, not URLs (e.g. `events.coverImageKey`).
+- `schema/auth.ts` holds the Better Auth tables (`users`, `sessions`, `accounts`, `verifications`). They are plural (`usePlural: true`) with uuid ids (`generateId: "uuid"`), so other tables can reference `users.id` as a `uuid`.
+  - The shape must match what Better Auth expects; it validates the Drizzle schema at startup and logs mismatches.
+  - After adding a Better Auth plugin, run `cd apps/auth && bunx auth@latest generate --config src/libs/auth.ts --output <scratch file> --yes`, merge the diff into `auth.ts` using the `_columns.ts` helpers, then run the migration flow.
+- Stripe access goes through the client in `apps/payment/src/libs/stripe.ts`. Only test keys (`sk_test_`) are accepted outside production.
 - Migration flow: edit the schema → `bun run db:generate` → review the SQL in `packages/db/drizzle/` → `bun run db:migrate`.
 
 ### Frontend: `apps/web`

@@ -1,0 +1,16 @@
+{
+  "name": "@app/registration",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "PORT=3003 bun --env-file=../../.env --watch src/index.ts"
+  },
+  "main": "src/index.ts",
+  "dependencies": {
+    "@app/db": "workspace:*",
+    "elysia": "^2.0.0-rc.0"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}

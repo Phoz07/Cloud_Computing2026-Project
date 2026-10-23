@@ -1,0 +1,19 @@
+{
+  "name": "@app/auth",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "PORT=3001 bun --env-file=../../.env --watch src/index.ts"
+  },
+  "main": "src/index.ts",
+  "dependencies": {
+    "@app/db": "workspace:*",
+    "@app/mail": "workspace:*",
+    "@better-auth/drizzle-adapter": "^1.7.12",
+    "better-auth": "^1.7.12",
+    "elysia": "^2.0.0-rc.0"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}
