@@ -1,6 +1,8 @@
 import { Elysia } from 'elysia'
+import { authGuard } from '@app/auth-guard'
 
 export const registration = new Elysia({ prefix: "/api/regis" })
+    .use(authGuard)
     .get('/health', () => 'โอเค')
 
 export type Registration = typeof registration;

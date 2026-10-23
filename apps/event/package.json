@@ -3,11 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "PORT=3002 bun --env-file=../../.env --watch src/index.ts"
+    "dev": "PORT=3002 bun --env-file=../../.env --watch src/index.ts",
+    "test": "bun --env-file=../../.env test"
   },
   "main": "src/index.ts",
   "dependencies": {
+    "@app/auth-guard": "workspace:*",
     "@app/db": "workspace:*",
+    "@app/storage": "workspace:*",
     "elysia": "^2.0.0-rc.0"
   },
   "devDependencies": {

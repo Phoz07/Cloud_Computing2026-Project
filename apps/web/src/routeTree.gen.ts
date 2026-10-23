@@ -10,33 +10,226 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthedRouteImport } from './routes/_authed'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as RegisterRouteImport } from './routes/register'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as AuthedDashboardRouteImport } from './routes/_authed/dashboard'
+import { Route as AuthedProfileRouteImport } from './routes/_authed/profile'
+import { Route as AuthedDashboardIndexRouteImport } from './routes/_authed/dashboard/index'
+import { Route as AuthedDashboardApplicationsRouteImport } from './routes/_authed/dashboard/applications'
+import { Route as AuthedDashboardEventsRouteImport } from './routes/_authed/dashboard/events'
+import { Route as AuthedDashboardUsersRouteImport } from './routes/_authed/dashboard/users'
+import { Route as AuthedProfileIndexRouteImport } from './routes/_authed/profile/index'
+import { Route as AuthedProfileDeleteRouteImport } from './routes/_authed/profile/delete'
+import { Route as AuthedProfileOrganizerRouteImport } from './routes/_authed/profile/organizer'
+import { Route as AuthedProfileSessionsRouteImport } from './routes/_authed/profile/sessions'
+import { Route as AuthedProfileSignInRouteImport } from './routes/_authed/profile/sign-in'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthedRoute = AuthedRouteImport.update({
+  id: '/_authed',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthedDashboardRoute = AuthedDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedProfileRoute = AuthedProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedDashboardIndexRoute = AuthedDashboardIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthedDashboardRoute,
+} as any)
+const AuthedDashboardApplicationsRoute =
+  AuthedDashboardApplicationsRouteImport.update({
+    id: '/applications',
+    path: '/applications',
+    getParentRoute: () => AuthedDashboardRoute,
+  } as any)
+const AuthedDashboardEventsRoute = AuthedDashboardEventsRouteImport.update({
+  id: '/events',
+  path: '/events',
+  getParentRoute: () => AuthedDashboardRoute,
+} as any)
+const AuthedDashboardUsersRoute = AuthedDashboardUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AuthedDashboardRoute,
+} as any)
+const AuthedProfileIndexRoute = AuthedProfileIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthedProfileRoute,
+} as any)
+const AuthedProfileDeleteRoute = AuthedProfileDeleteRouteImport.update({
+  id: '/delete',
+  path: '/delete',
+  getParentRoute: () => AuthedProfileRoute,
+} as any)
+const AuthedProfileOrganizerRoute = AuthedProfileOrganizerRouteImport.update({
+  id: '/organizer',
+  path: '/organizer',
+  getParentRoute: () => AuthedProfileRoute,
+} as any)
+const AuthedProfileSessionsRoute = AuthedProfileSessionsRouteImport.update({
+  id: '/sessions',
+  path: '/sessions',
+  getParentRoute: () => AuthedProfileRoute,
+} as any)
+const AuthedProfileSignInRoute = AuthedProfileSignInRouteImport.update({
+  id: '/sign-in',
+  path: '/sign-in',
+  getParentRoute: () => AuthedProfileRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/dashboard': typeof AuthedDashboardRouteWithChildren
+  '/profile': typeof AuthedProfileRouteWithChildren
+  '/dashboard/applications': typeof AuthedDashboardApplicationsRoute
+  '/dashboard/events': typeof AuthedDashboardEventsRoute
+  '/dashboard/users': typeof AuthedDashboardUsersRoute
+  '/profile/delete': typeof AuthedProfileDeleteRoute
+  '/profile/organizer': typeof AuthedProfileOrganizerRoute
+  '/profile/sessions': typeof AuthedProfileSessionsRoute
+  '/profile/sign-in': typeof AuthedProfileSignInRoute
+  '/dashboard/': typeof AuthedDashboardIndexRoute
+  '/profile/': typeof AuthedProfileIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/dashboard/applications': typeof AuthedDashboardApplicationsRoute
+  '/dashboard/events': typeof AuthedDashboardEventsRoute
+  '/dashboard/users': typeof AuthedDashboardUsersRoute
+  '/profile/delete': typeof AuthedProfileDeleteRoute
+  '/profile/organizer': typeof AuthedProfileOrganizerRoute
+  '/profile/sessions': typeof AuthedProfileSessionsRoute
+  '/profile/sign-in': typeof AuthedProfileSignInRoute
+  '/dashboard': typeof AuthedDashboardIndexRoute
+  '/profile': typeof AuthedProfileIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_authed': typeof AuthedRouteWithChildren
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/_authed/dashboard': typeof AuthedDashboardRouteWithChildren
+  '/_authed/profile': typeof AuthedProfileRouteWithChildren
+  '/_authed/dashboard/applications': typeof AuthedDashboardApplicationsRoute
+  '/_authed/dashboard/events': typeof AuthedDashboardEventsRoute
+  '/_authed/dashboard/users': typeof AuthedDashboardUsersRoute
+  '/_authed/profile/delete': typeof AuthedProfileDeleteRoute
+  '/_authed/profile/organizer': typeof AuthedProfileOrganizerRoute
+  '/_authed/profile/sessions': typeof AuthedProfileSessionsRoute
+  '/_authed/profile/sign-in': typeof AuthedProfileSignInRoute
+  '/_authed/dashboard/': typeof AuthedDashboardIndexRoute
+  '/_authed/profile/': typeof AuthedProfileIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/forgot-password'
+    | '/login'
+    | '/register'
+    | '/reset-password'
+    | '/dashboard'
+    | '/profile'
+    | '/dashboard/applications'
+    | '/dashboard/events'
+    | '/dashboard/users'
+    | '/profile/delete'
+    | '/profile/organizer'
+    | '/profile/sessions'
+    | '/profile/sign-in'
+    | '/dashboard/'
+    | '/profile/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/forgot-password'
+    | '/login'
+    | '/register'
+    | '/reset-password'
+    | '/dashboard/applications'
+    | '/dashboard/events'
+    | '/dashboard/users'
+    | '/profile/delete'
+    | '/profile/organizer'
+    | '/profile/sessions'
+    | '/profile/sign-in'
+    | '/dashboard'
+    | '/profile'
+  id:
+    | '__root__'
+    | '/'
+    | '/_authed'
+    | '/forgot-password'
+    | '/login'
+    | '/register'
+    | '/reset-password'
+    | '/_authed/dashboard'
+    | '/_authed/profile'
+    | '/_authed/dashboard/applications'
+    | '/_authed/dashboard/events'
+    | '/_authed/dashboard/users'
+    | '/_authed/profile/delete'
+    | '/_authed/profile/organizer'
+    | '/_authed/profile/sessions'
+    | '/_authed/profile/sign-in'
+    | '/_authed/dashboard/'
+    | '/_authed/profile/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthedRoute: typeof AuthedRouteWithChildren
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
+  LoginRoute: typeof LoginRoute
+  RegisterRoute: typeof RegisterRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +241,179 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authed': {
+      id: '/_authed'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authed/dashboard': {
+      id: '/_authed/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthedDashboardRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/profile': {
+      id: '/_authed/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof AuthedProfileRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/dashboard/': {
+      id: '/_authed/dashboard/'
+      path: '/'
+      fullPath: '/dashboard/'
+      preLoaderRoute: typeof AuthedDashboardIndexRouteImport
+      parentRoute: typeof AuthedDashboardRoute
+    }
+    '/_authed/dashboard/applications': {
+      id: '/_authed/dashboard/applications'
+      path: '/applications'
+      fullPath: '/dashboard/applications'
+      preLoaderRoute: typeof AuthedDashboardApplicationsRouteImport
+      parentRoute: typeof AuthedDashboardRoute
+    }
+    '/_authed/dashboard/events': {
+      id: '/_authed/dashboard/events'
+      path: '/events'
+      fullPath: '/dashboard/events'
+      preLoaderRoute: typeof AuthedDashboardEventsRouteImport
+      parentRoute: typeof AuthedDashboardRoute
+    }
+    '/_authed/dashboard/users': {
+      id: '/_authed/dashboard/users'
+      path: '/users'
+      fullPath: '/dashboard/users'
+      preLoaderRoute: typeof AuthedDashboardUsersRouteImport
+      parentRoute: typeof AuthedDashboardRoute
+    }
+    '/_authed/profile/': {
+      id: '/_authed/profile/'
+      path: '/'
+      fullPath: '/profile/'
+      preLoaderRoute: typeof AuthedProfileIndexRouteImport
+      parentRoute: typeof AuthedProfileRoute
+    }
+    '/_authed/profile/delete': {
+      id: '/_authed/profile/delete'
+      path: '/delete'
+      fullPath: '/profile/delete'
+      preLoaderRoute: typeof AuthedProfileDeleteRouteImport
+      parentRoute: typeof AuthedProfileRoute
+    }
+    '/_authed/profile/organizer': {
+      id: '/_authed/profile/organizer'
+      path: '/organizer'
+      fullPath: '/profile/organizer'
+      preLoaderRoute: typeof AuthedProfileOrganizerRouteImport
+      parentRoute: typeof AuthedProfileRoute
+    }
+    '/_authed/profile/sessions': {
+      id: '/_authed/profile/sessions'
+      path: '/sessions'
+      fullPath: '/profile/sessions'
+      preLoaderRoute: typeof AuthedProfileSessionsRouteImport
+      parentRoute: typeof AuthedProfileRoute
+    }
+    '/_authed/profile/sign-in': {
+      id: '/_authed/profile/sign-in'
+      path: '/sign-in'
+      fullPath: '/profile/sign-in'
+      preLoaderRoute: typeof AuthedProfileSignInRouteImport
+      parentRoute: typeof AuthedProfileRoute
+    }
   }
 }
 
+interface AuthedDashboardRouteChildren {
+  AuthedDashboardApplicationsRoute: typeof AuthedDashboardApplicationsRoute
+  AuthedDashboardEventsRoute: typeof AuthedDashboardEventsRoute
+  AuthedDashboardUsersRoute: typeof AuthedDashboardUsersRoute
+  AuthedDashboardIndexRoute: typeof AuthedDashboardIndexRoute
+}
+
+const AuthedDashboardRouteChildren: AuthedDashboardRouteChildren = {
+  AuthedDashboardApplicationsRoute: AuthedDashboardApplicationsRoute,
+  AuthedDashboardEventsRoute: AuthedDashboardEventsRoute,
+  AuthedDashboardUsersRoute: AuthedDashboardUsersRoute,
+  AuthedDashboardIndexRoute: AuthedDashboardIndexRoute,
+}
+
+const AuthedDashboardRouteWithChildren = AuthedDashboardRoute._addFileChildren(
+  AuthedDashboardRouteChildren,
+)
+
+interface AuthedProfileRouteChildren {
+  AuthedProfileDeleteRoute: typeof AuthedProfileDeleteRoute
+  AuthedProfileOrganizerRoute: typeof AuthedProfileOrganizerRoute
+  AuthedProfileSessionsRoute: typeof AuthedProfileSessionsRoute
+  AuthedProfileSignInRoute: typeof AuthedProfileSignInRoute
+  AuthedProfileIndexRoute: typeof AuthedProfileIndexRoute
+}
+
+const AuthedProfileRouteChildren: AuthedProfileRouteChildren = {
+  AuthedProfileDeleteRoute: AuthedProfileDeleteRoute,
+  AuthedProfileOrganizerRoute: AuthedProfileOrganizerRoute,
+  AuthedProfileSessionsRoute: AuthedProfileSessionsRoute,
+  AuthedProfileSignInRoute: AuthedProfileSignInRoute,
+  AuthedProfileIndexRoute: AuthedProfileIndexRoute,
+}
+
+const AuthedProfileRouteWithChildren = AuthedProfileRoute._addFileChildren(
+  AuthedProfileRouteChildren,
+)
+
+interface AuthedRouteChildren {
+  AuthedDashboardRoute: typeof AuthedDashboardRouteWithChildren
+  AuthedProfileRoute: typeof AuthedProfileRouteWithChildren
+}
+
+const AuthedRouteChildren: AuthedRouteChildren = {
+  AuthedDashboardRoute: AuthedDashboardRouteWithChildren,
+  AuthedProfileRoute: AuthedProfileRouteWithChildren,
+}
+
+const AuthedRouteWithChildren =
+  AuthedRoute._addFileChildren(AuthedRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthedRoute: AuthedRouteWithChildren,
+  ForgotPasswordRoute: ForgotPasswordRoute,
+  LoginRoute: LoginRoute,
+  RegisterRoute: RegisterRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

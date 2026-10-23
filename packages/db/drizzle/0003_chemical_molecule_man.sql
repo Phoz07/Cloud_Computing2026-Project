@@ -1,0 +1,1 @@
+ALTER TYPE "public"."organizer_application_status" ADD VALUE 'cancelled';
