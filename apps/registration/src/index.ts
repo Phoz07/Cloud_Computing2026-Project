@@ -1,11 +1,7 @@
-import { Elysia } from 'elysia'
-import { authGuard } from '@app/auth-guard'
+import { registration } from "./app";
 
-export const registration = new Elysia({ prefix: "/api/regis" })
-    .use(authGuard)
-    .get('/health', () => 'โอเค')
-
-export type Registration = typeof registration;
+export { registration };
+export type { Registration } from "./app";
 
 if (import.meta.main) {
   const port = Number(process.env.PORT ?? 3003);
