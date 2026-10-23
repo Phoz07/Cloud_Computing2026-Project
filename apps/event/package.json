@@ -4,16 +4,20 @@
   "type": "module",
   "scripts": {
     "dev": "PORT=3002 bun --env-file=../../.env --watch src/index.ts",
-    "test": "bun --env-file=../../.env test"
+    "test": "for f in test/*.test.ts; do bun --env-file=../../.env test $f || exit 1; done"
   },
   "main": "src/index.ts",
   "dependencies": {
     "@app/auth-guard": "workspace:*",
     "@app/db": "workspace:*",
+    "@app/tickets": "workspace:*",
+    "@app/mail": "workspace:*",
     "@app/storage": "workspace:*",
-    "elysia": "^2.0.0-rc.0"
+    "elysia": "^2.0.0-rc.0",
+    "sanitize-html": "^2.18.1"
   },
   "devDependencies": {
+    "@types/sanitize-html": "^2.16.2",
     "typescript": "^7.0.2"
   }
 }

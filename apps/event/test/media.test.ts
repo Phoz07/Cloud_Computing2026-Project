@@ -12,9 +12,12 @@ mock.module("@app/auth-guard", () => ({
   authenticate: actual.createAuthenticator(resolve),
 }));
 
+// invite-only events email their invitees; never reach the real queue
+mock.module("@app/mail", () => ({ enqueueMail: mock(async () => {}) }));
+
 const { event: app } = await import("../src/app");
 const { MAX_ASSETS_PER_EVENT } = await import("../src/routes/media/service");
-const { db, eq, eventAssets, events, inArray, users } = await import("@app/db");
+const { db, eq, eventAssets, eventCategories, events, inArray, users } = await import("@app/db");
 const { useMemoryStorage } = await import("@app/storage/testing");
 
 // 1x1 transparent PNG
@@ -26,6 +29,7 @@ const pngFile = () => new File([png], "photo.png", { type: "image/png" });
 const runId = crypto.randomUUID().slice(0, 8);
 const userIds: string[] = [];
 const eventIds: string[] = [];
+let categoryId: string;
 
 async function seedUser(name: string, role: Role) {
   const [user] = await db
@@ -43,7 +47,15 @@ async function seedUser(name: string, role: Role) {
 async function seedEvent(organizerId: string) {
   const [event] = await db
     .insert(events)
-    .values({ organizerId, title: "Test", startsAt: new Date(), endsAt: new Date() })
+    .values({
+      organizerId,
+      categoryId,
+      title: "Test",
+      slug: `test-${crypto.randomUUID()}`,
+      venue: "Test venue",
+      startsAt: new Date(),
+      endsAt: new Date(),
+    })
     .returning({ id: events.id });
   eventIds.push(event!.id);
   return event!.id;
@@ -68,6 +80,11 @@ let eventId: string;
 let otherEventId: string;
 
 beforeAll(async () => {
+  const [category] = await db
+    .insert(eventCategories)
+    .values({ name: `media-${runId}`, slug: `media-${runId}` })
+    .returning({ id: eventCategories.id });
+  categoryId = category!.id;
   const owner = await seedUser("owner", "organizer");
   const other = await seedUser("other", "organizer");
   await seedUser("admin", "admin");
@@ -83,6 +100,7 @@ beforeEach(() => {
 afterAll(async () => {
   await db.delete(events).where(inArray(events.id, eventIds));
   await db.delete(users).where(inArray(users.id, userIds));
+  await db.delete(eventCategories).where(eq(eventCategories.id, categoryId));
 });
 
 describe("access", () => {
