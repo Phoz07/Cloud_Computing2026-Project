@@ -6,7 +6,8 @@ import { adminAc, defaultStatements, userAc } from "better-auth/plugins/admin/ac
 // Ownership (an organizer touching only their own events) is checked by the services, not here.
 export const statement = {
   ...defaultStatements,
-  event: ["create", "update", "delete", "manage-all"],
+  event: ["create", "update", "delete", "manage-all", "suspend"],
+  category: ["create", "update", "delete"],
   ticket: ["check-in"],
   "organizer-application": ["apply", "review"],
 } as const;
@@ -26,7 +27,8 @@ export const roles = {
   }),
   admin: ac.newRole({
     ...adminAc.statements,
-    event: ["create", "update", "delete", "manage-all"],
+    event: ["create", "update", "delete", "manage-all", "suspend"],
+    category: ["create", "update", "delete"],
     ticket: ["check-in"],
     "organizer-application": ["review"],
   }),

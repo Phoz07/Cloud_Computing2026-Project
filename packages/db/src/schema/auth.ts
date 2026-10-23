@@ -15,6 +15,9 @@ export const users = pgTable("users", {
   banned: boolean("banned").default(false),
   banReason: text("ban_reason"),
   banExpires: timestamp("ban_expires", { withTimezone: true }),
+  // user.additionalFields; pre-fill the attendee details when enrolling
+  firstName: text("first_name"),
+  lastName: text("last_name"),
   ...timestamps,
 });
 

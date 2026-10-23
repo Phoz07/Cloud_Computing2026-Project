@@ -7,4 +7,7 @@ export type DB = typeof db;
 
 export * from "./schema";
 
-export { eq, ne, and, or, not, inArray, isNull, desc, asc, sql, count } from "drizzle-orm";
+export {
+  eq, ne, and, or, not, inArray, notInArray, isNull, isNotNull, desc, asc, sql, count, ilike, lt, lte, gt, gte,
+  type SQL,
+} from "drizzle-orm";

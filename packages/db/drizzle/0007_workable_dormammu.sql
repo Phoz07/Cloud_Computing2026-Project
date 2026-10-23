@@ -1,0 +1,1 @@
+ALTER TABLE "event_invitations" ADD COLUMN "notified_at" timestamp with time zone;
