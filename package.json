@@ -19,7 +19,8 @@
     "typecheck": "bun check"
   },
   "devDependencies": {
-    "@types/bun": "^1.4.3"
+    "@types/bun": "^1.4.3",
+    "shadcn": "^4.22.1"
   },
   "peerDependencies": {
     "typescript": "^7.0.2"

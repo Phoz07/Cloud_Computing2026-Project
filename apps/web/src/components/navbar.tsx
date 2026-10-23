@@ -8,7 +8,7 @@ export default function Navbar(){
     <header className="w-full top-0 sticky border-b h-17 flex p-4 items-center justify-center">
       <div className="flex container w-full justify-between items-center">
         <Link to="/" className="font-bold text-2xl"><span className="text-primary">Event</span>ide</Link>
-        <Link to="/" className={ cn(buttonVariants({variant:"default"}),"font-bold text-lg")}><Telescope size={"1.4em"} /> สำรวจ</Link>
+        <Link to="/" className={cn(buttonVariants({variant:"default"}),"font-bold text-lg")}><Telescope /> สำรวจ</Link>
       </div>
     </header>
   )
