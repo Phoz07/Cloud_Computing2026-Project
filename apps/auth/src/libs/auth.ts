@@ -7,11 +7,15 @@ import { markUserRevoked } from "@app/auth-guard";
 import { ac, roles } from "@app/auth-guard/permissions";
 import { enqueueMail } from "@app/mail";
 import { deleteFile, ownedKey } from "@app/storage";
+import { z } from "zod";
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
 
 export const googleEnabled = Boolean(googleClientId && googleClientSecret);
+
+// null clears it; Google may leave a part out
+const personName = z.string().max(100).nullish();
 
 // Other services cache sessions in Redis (see @app/auth-guard). Marking the user revoked makes
 // those caches stale, so a ban, role change or sign-out applies on the very next request.
@@ -62,6 +66,11 @@ export const auth = betterAuth({
     },
   },
   user: {
+    // Pre-fill the attendee details when enrolling (apps/registration); users edit them on /profile.
+    additionalFields: {
+      firstName: { type: "string", required: false, validator: { input: personName } },
+      lastName: { type: "string", required: false, validator: { input: personName } },
+    },
     // Password users confirm with their password; Google-only users need a fresh session.
     deleteUser: {
       enabled: true,
@@ -75,7 +84,13 @@ export const auth = betterAuth({
     },
   },
   socialProviders: googleEnabled
-    ? { google: { clientId: googleClientId!, clientSecret: googleClientSecret! } }
+    ? {
+        google: {
+          clientId: googleClientId!,
+          clientSecret: googleClientSecret!,
+          mapProfileToUser: (profile) => ({ firstName: profile.given_name, lastName: profile.family_name }),
+        },
+      }
     : {},
   // Defaults kept on purpose: linking is enabled, but a Google sign-in is only merged into an
   // existing account whose email is verified locally. Email verification isn't set up, so a

@@ -2,6 +2,7 @@ import { Elysia, t } from "elysia";
 import { auth, googleEnabled } from "./libs/auth";
 import { avatar } from "./routes/avatar";
 import { organizerApplications } from "./routes/organizer-applications";
+import { organizers } from "./routes/organizers";
 
 // Our own routes are static or dynamic, so they win over the Better Auth wildcard below.
 // .mount() would strip the prefix, but Better Auth routes on the full /api/auth/* path,
@@ -13,6 +14,7 @@ export const authentication = new Elysia({ prefix: "/api/auth" })
     google: googleEnabled,
   }))
   .use(organizerApplications)
+  .use(organizers)
   .use(avatar)
   .all("/*", { parse: "none" }, ({ request }) => auth.handler(request));
 

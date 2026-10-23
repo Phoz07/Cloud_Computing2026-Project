@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 mock.module("@app/mail", () => ({ enqueueMail: mock(async () => {}) }));
 
 const { authentication } = await import("../src/app");
-const { db, eq, events, inArray, users } = await import("@app/db");
+const { db, eq, eventCategories, events, inArray, users } = await import("@app/db");
 
 // Needs `bun run infra:up`: avatars are written to the MinIO bucket.
 const origin = process.env.BETTER_AUTH_URL ?? "http://localhost:5173";
@@ -13,6 +13,7 @@ const password = "password1234";
 const createdEmails: string[] = [];
 const createdUserIds: string[] = [];
 const createdEventIds: string[] = [];
+const createdCategoryIds: string[] = [];
 
 // 1x1 transparent PNG
 const png = Uint8Array.fromBase64(
@@ -83,6 +84,7 @@ afterAll(async () => {
     await Promise.all(contents.map(({ key }) => Bun.s3.delete(key)));
   }
   if (createdEventIds.length) await db.delete(events).where(inArray(events.id, createdEventIds));
+  if (createdCategoryIds.length) await db.delete(eventCategories).where(inArray(eventCategories.id, createdCategoryIds));
   await db.delete(users).where(inArray(users.email, createdEmails));
 });
 
@@ -158,9 +160,22 @@ describe("deleting an account", () => {
     const organizer = await signUp("avatar-organizer");
     const admin = await signUp("avatar-admin");
     await db.update(users).set({ role: "admin" }).where(eq(users.id, admin.id));
+    const [category] = await db
+      .insert(eventCategories)
+      .values({ name: `avatar-${runId}`, slug: `avatar-${runId}` })
+      .returning({ id: eventCategories.id });
+    createdCategoryIds.push(category!.id);
     const [event] = await db
       .insert(events)
-      .values({ organizerId: organizer.id, title: "Test", startsAt: new Date(), endsAt: new Date() })
+      .values({
+        organizerId: organizer.id,
+        categoryId: category!.id,
+        title: "Test",
+        slug: `avatar-test-${runId}`,
+        venue: "Test venue",
+        startsAt: new Date(),
+        endsAt: new Date(),
+      })
       .returning({ id: events.id });
     createdEventIds.push(event!.id);
 
