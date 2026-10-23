@@ -1,0 +1,14 @@
+{
+  "name": "@app/tickets",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@app/db": "workspace:*",
+    "@app/mail": "workspace:*",
+    "elysia": "^2.0.0-rc.0"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}
