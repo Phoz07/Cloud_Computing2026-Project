@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, CalendarClock, ExternalLink, Mail, MapPin, ShoppingBag, TicketX, UserRound } from "lucide-react";
+import {
+  ArrowLeft, CalendarClock, ExternalLink, Mail, MapPin, ReceiptText, ShoppingBag, TicketX, UserRound,
+} from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -109,7 +111,18 @@ function TicketPage() {
             </dl>
           )}
         </CardContent>
-        <CardFooter>
+        <CardFooter className="flex-col gap-2">
+          {/* the order is where its buyer asks for a refund */}
+          {ticket.isBuyer && (
+            <Link
+              to="/tickets/orders/$enrollmentId"
+              params={{ enrollmentId: ticket.enrollmentId }}
+              className={buttonVariants({ variant: "outline", className: "w-full" })}
+            >
+              <ReceiptText data-icon="inline-start" />
+              ดูรายการสั่งซื้อ
+            </Link>
+          )}
           <Link to="/events/$slug" params={{ slug: event.slug }} className={buttonVariants({ variant: "outline", className: "w-full" })}>
             <ExternalLink data-icon="inline-start" />
             ดูหน้าอีเวนต์

@@ -13,7 +13,10 @@ const sessionsCreate = mock(async (_params: Stripe.Checkout.SessionCreateParams)
   const id = `cs_test_${crypto.randomUUID()}`;
   return { id, url: `https://checkout.stripe.test/${id}` };
 });
-const refundsCreate = mock(async (_params: Stripe.RefundCreateParams, _options?: unknown) => ({ id: "re_test" }));
+const refundsCreate = mock(async (_params: Stripe.RefundCreateParams, _options?: unknown) => ({
+  id: `re_test_${crypto.randomUUID()}`,
+  status: "succeeded",
+}));
 mock.module("../src/libs/stripe", () => ({
   stripe: { checkout: { sessions: { create: sessionsCreate } }, refunds: { create: refundsCreate }, webhooks: realStripe.webhooks },
   webhookSecret: SECRET,
@@ -30,7 +33,7 @@ mock.module("@app/auth-guard", () => ({
 }));
 
 const { payment: app } = await import("../src/app");
-const { db, enrollments, eq, eventCategories, events, inArray, payments, tickets, ticketTypes, users } = await import("@app/db");
+const { db, enrollments, eq, eventCategories, events, inArray, payments, refunds, tickets, ticketTypes, users } = await import("@app/db");
 
 const runId = crypto.randomUUID().slice(0, 8);
 const userIds: Record<string, string> = {};
@@ -95,7 +98,7 @@ async function ticketType(kind: "first_come" | "approval" = "first_come", quota 
   return { eventId: event!.id, ticketTypeId: type!.id };
 }
 
-type EnrollOptions = { status?: "pending" | "awaiting_payment" | "confirmed"; quantity?: number; expiresInMs?: number };
+type EnrollOptions = { status?: "pending" | "awaiting_payment" | "confirmed" | "cancelled"; quantity?: number; expiresInMs?: number };
 
 /** An enrollment as apps/registration makes it: a paid one held for 35 minutes by default. */
 async function enrollment(type: { eventId: string; ticketTypeId: string }, options: EnrollOptions = {}) {
@@ -148,6 +151,7 @@ beforeEach(() => {
 
 afterAll(async () => {
   const ids = (await db.select({ id: enrollments.id }).from(enrollments).where(inArray(enrollments.eventId, eventIds))).map((r) => r.id);
+  if (ids.length) await db.delete(refunds).where(inArray(refunds.enrollmentId, ids));
   if (ids.length) await db.delete(payments).where(inArray(payments.enrollmentId, ids));
   await db.delete(enrollments).where(inArray(enrollments.eventId, eventIds));
   await db.delete(events).where(inArray(events.id, eventIds));
@@ -248,10 +252,24 @@ describe("webhook", () => {
 
     expect((await paid((await paymentOf(late)).stripeSessionId)).status).toBe(200);
     expect(refundsCreate).toHaveBeenCalledTimes(1);
-    expect(refundsCreate.mock.calls[0]![0]).toMatchObject({ payment_intent: "pi_test" });
+    expect(refundsCreate.mock.calls[0]![0]).toMatchObject({ payment_intent: "pi_test", amount: 60_000 });
     expect(await statusOf(late)).toBe("expired");
-    expect((await paymentOf(late)).status).toBe("refunded");
+    const payment = await paymentOf(late);
+    expect(payment.status).toBe("refunded");
+    expect(refundsCreate.mock.calls[0]![1]).toEqual({ idempotencyKey: `refund-${payment.id}` });
+    const [refund] = await db.select().from(refunds).where(eq(refunds.paymentId, payment.id));
+    expect(refund).toMatchObject({ amount: "600.00", percent: 100, initiatedBy: "system", note: "unavailable", status: "succeeded" });
     expect(enqueueMail.mock.calls.map(([m]) => m.to)).toEqual([emailOf("buyer")]);
+  });
+
+  test("a payment for an order cancelled meanwhile is refunded, and the order stays cancelled", async () => {
+    const id = await enrollment(await ticketType());
+    await checkout(id);
+    await db.update(enrollments).set({ status: "cancelled" }).where(eq(enrollments.id, id));
+    await paid((await paymentOf(id)).stripeSessionId);
+    expect(refundsCreate).toHaveBeenCalledTimes(1);
+    expect(await statusOf(id)).toBe("cancelled");
+    expect((await paymentOf(id)).status).toBe("refunded");
   });
 
   test("a late payment still confirms when the seats are free", async () => {

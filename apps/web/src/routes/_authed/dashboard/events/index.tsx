@@ -143,6 +143,18 @@ function EventsPage() {
             icon: SearchX,
             title: "ไม่พบอีเวนต์ที่ตรงกับตัวกรอง",
             description: q ? `ไม่มีอีเวนต์ที่ชื่อหรือสถานที่ตรงกับ “${q}”` : "ลองเลือกสถานะอื่น",
+            action: filtered && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSearch("");
+                  void navigate({ search: {} });
+                }}
+              >
+                <X data-icon="inline-start" />
+                ล้างตัวกรอง
+              </Button>
+            ),
           }}
           pagination={{
             state: { pageIndex: page - 1, pageSize: PAGE_SIZE },
@@ -152,20 +164,6 @@ function EventsPage() {
           }}
         />
       </div>
-      {filtered && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="self-start"
-          onClick={() => {
-            setSearch("");
-            void navigate({ search: {} });
-          }}
-        >
-          <X data-icon="inline-start" />
-          ล้างตัวกรอง
-        </Button>
-      )}
     </>
   );
 }

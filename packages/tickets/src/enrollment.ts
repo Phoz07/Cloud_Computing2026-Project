@@ -70,6 +70,20 @@ export async function markConfirmed(tx: Tx, enrollment: Pick<EnrollmentRow, "id"
 }
 
 /**
+ * Cancels a refunded enrollment. It stops holding its seats and its invitation, which the invitee
+ * may use again. Run it in the transaction that locked the enrollment.
+ */
+export async function markCancelled(tx: Tx, enrollment: Pick<EnrollmentRow, "id" | "invitationId">) {
+  await tx
+    .update(enrollments)
+    .set({ status: "cancelled", cancelledAt: new Date(), expiresAt: null })
+    .where(eq(enrollments.id, enrollment.id));
+  if (enrollment.invitationId) {
+    await tx.update(eventInvitations).set({ usedAt: null }).where(eq(eventInvitations.id, enrollment.invitationId));
+  }
+}
+
+/**
  * Confirms a pending (approved) or paid enrollment. A first_come or invite enrollment whose hold
  * ran out no longer owns its seats or invitation, so it's confirmed only if they're still free;
  * otherwise `SoldOut` (the payment service then refunds). Approval tickets have no seats to protect.
@@ -80,7 +94,8 @@ export async function confirmEnrollment(enrollmentId: string) {
     const [enrollment] = await tx.select().from(enrollments).where(eq(enrollments.id, enrollmentId)).for("update");
     if (!enrollment) return new EnrollmentNotFound();
     if (enrollment.status === "confirmed") return { alreadyConfirmed: true };
-    if (enrollment.status === "rejected") return new EnrollmentClosed();
+    // a cancelled order stays cancelled; a payment that still lands for it is refunded
+    if (enrollment.status === "rejected" || enrollment.status === "cancelled") return new EnrollmentClosed();
 
     // the same lock the registration service takes before counting seats
     const [ticketType] = await tx

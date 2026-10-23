@@ -79,7 +79,7 @@ bun run --filter @app/web build   # tsc -b && vite build
   | `apps/auth` | 3001 | `/api/auth` | Better Auth: accounts, sessions, roles, bans |
   | `apps/event` | 3002 | `/api/events` | events (CRUD, slug, status, refund policy, HTML description), categories (admin-only), cover + gallery, invitations (who may open an `invite`-status event, by email), ticket types and their registration forms (`ticket_types`, `ticket_type_questions`) |
   | `apps/registration` | 3003 | `/api/regis` | seat availability, enrollments (enroll, approve / reject), tickets ("my tickets"), check-in |
-  | `apps/payment` | 3004 | `/api/payment` | Stripe Checkout for enrollments, the Stripe webhook, refunds (`payments`) |
+  | `apps/payment` | 3004 | `/api/payment` | Stripe Checkout for enrollments, the Stripe webhook, refunds (`payments`, `refunds`) |
 
 - `apps/mail-worker`: an SQS consumer with no HTTP server. It sends queued mail through Gmail.
 - `packages/db` (`@app/db`): the Drizzle schema and client that every service shares.
@@ -169,8 +169,12 @@ test/<feature>.test.ts
   - "My tickets" shows confirmed tickets the account bought **or** that carry its email.
 - **Payment** (`apps/payment`): `POST /checkout` makes (or reuses) a Stripe Checkout session; `POST /webhook` (`parse: 'none'`, `constructEventAsync`, since the SDK verifies with SubtleCrypto under Bun) confirms the enrollment, or refunds a payment that arrived after its hold lapsed and the seats went.
   - Paid first_come / invite enrollments hold seats for 35 minutes (the 30-minute session plus slack); approved paid ones have 72 hours to pay.
-  - Dev: set `STRIPE_WEBHOOK_SECRET` to the `whsec_…` that `bun run stripe:listen` prints (the Stripe CLI needs the events named; the script lists the four Checkout events the webhook handles).
+  - Dev: set `STRIPE_WEBHOOK_SECRET` to the `whsec_…` that `bun run stripe:listen` prints (the Stripe CLI needs the events named; the script lists the six events the webhook handles).
   - Stripe setup, from creating a sandbox and a restricted key to the production webhook endpoint: `docs/stripe.md`.
+- **Refunds** (`apps/payment`, table `refunds`) are whole-order and cancel the enrollment (`cancelled`, `markCancelled()`), which frees its seats and invitation.
+  - The buyer (`POST /refunds`) gets the policy's percent until `starts_at − cutoff`. The policy is the one snapshotted onto `enrollments.refund_percent` / `refund_cutoff_hours` at enroll time, and `refundTerms()` in `@app/tickets` is the one place that reads it.
+  - The organizer or an admin (`POST /enrollments/:id/refund`) refunds 100% at any time.
+  - `issueRefund()` (`src/libs/refund.ts`) uses the idempotency key `refund-<paymentId>`, so a payment is refunded at most once. Stripe refunds are async (PromptPay starts at `requires_action`, and a card refund can fail later), so `refund.updated` / `refund.failed` keep `refunds.status` current.
 - Enrollments keep their event, ticket type and invitation with `ON DELETE RESTRICT`, so those services answer `EVENT_HAS_ENROLLMENTS`, `TICKET_TYPE_IN_USE` and `INVITATION_USED` instead.
 - Design, lifecycle diagrams and failure modes: `docs/tickets.md`.
 

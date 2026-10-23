@@ -1,8 +1,8 @@
-import { and, db, enrollments, eq, events, ne, payments, ticketTypes, users } from "@app/db";
-import { enqueueMail } from "@app/mail";
-import { confirmEnrollment, formatMailTime, sendTicketMails } from "@app/tickets";
+import { and, db, enrollments, eq, ne, notInArray, payments, refunds, ticketTypes } from "@app/db";
+import { confirmEnrollment, sendTicketMails } from "@app/tickets";
 import type Stripe from "stripe";
-import { stripe } from "../../libs/stripe";
+import { mailLateRefund, mailRefundFailed } from "../../libs/mail";
+import { issueRefund, toRefundStatus } from "../../libs/refund";
 
 type Session = Stripe.Checkout.Session;
 type PaymentRow = typeof payments.$inferSelect;
@@ -11,6 +11,7 @@ type PaymentRow = typeof payments.$inferSelect;
  * Handles the Checkout events this service cares about. Each one first claims its payment row
  * with a conditional update (pending → paid / expired), so a redelivered event is a no-op.
  * Anything that throws after the claim releases it, so Stripe's retry runs the whole step again.
+ * Refund events update the refund they're about.
  */
 export async function handleStripeEvent(event: Stripe.Event) {
   switch (event.type) {
@@ -22,6 +23,10 @@ export async function handleStripeEvent(event: Stripe.Event) {
     case "checkout.session.expired":
     case "checkout.session.async_payment_failed":
       await settleUnpaid(event.data.object);
+      return;
+    case "refund.updated":
+    case "refund.failed":
+      await settleRefund(event.data.object);
       return;
   }
 }
@@ -59,41 +64,43 @@ async function settlePaid(session: Session) {
 
 /**
  * Refunds a payment in full and closes its enrollment unless another payment confirmed it.
- * The idempotency key makes Stripe's retries (and ours) refund once.
+ * issueRefund's idempotency key makes Stripe's retries (and ours) refund once.
  */
 async function refund(payment: PaymentRow, reason: "duplicate" | "unavailable") {
-  if (!payment.stripePaymentIntentId) throw new Error(`Paid session without a payment intent: ${payment.stripeSessionId}`);
-  await stripe.refunds.create(
-    { payment_intent: payment.stripePaymentIntentId, metadata: { enrollmentId: payment.enrollmentId, reason } },
-    { idempotencyKey: `refund-${payment.id}` },
-  );
-  await db.update(payments).set({ status: "refunded" }).where(eq(payments.id, payment.id));
+  const refunded = await issueRefund(db, payment, { percent: 100, initiatedBy: "system", note: reason });
+  // the catch in settlePaid releases the payment, so Stripe's retry tries again
+  if (refunded instanceof Error) throw refunded;
   if (reason === "duplicate") return;
 
+  // only a lapsed hold; a rejected or cancelled order keeps its status
   await db
     .update(enrollments)
     .set({ status: "expired" })
-    .where(and(eq(enrollments.id, payment.enrollmentId), ne(enrollments.status, "confirmed")));
-  await mailRefund(payment).catch((error) => console.error("Failed to enqueue refund mail", error));
+    .where(and(eq(enrollments.id, payment.enrollmentId), eq(enrollments.status, "awaiting_payment")));
+  await mailLateRefund(payment.enrollmentId, payment.amount);
 }
 
-async function mailRefund(payment: PaymentRow) {
-  const [order] = await db
-    .select({ email: users.email, name: users.name, title: events.title, startsAt: events.startsAt })
-    .from(enrollments)
-    .innerJoin(events, eq(events.id, enrollments.eventId))
-    .innerJoin(users, eq(users.id, enrollments.buyerId))
-    .where(eq(enrollments.id, payment.enrollmentId));
-  if (!order) return;
-  await enqueueMail({
-    to: order.email,
-    subject: `คืนเงินแล้ว: ${order.title}`,
-    html:
-      `<p>สวัสดีคุณ ${Bun.escapeHTML(order.name)}</p>` +
-      `<p>การชำระเงินสำหรับอีเวนต์ <strong>${Bun.escapeHTML(order.title)}</strong> (${formatMailTime(order.startsAt)}) ` +
-      `เข้ามาหลังหมดเวลาจองที่นั่ง และที่นั่งเต็มแล้ว เราจึงคืนเงิน ฿${Number(payment.amount).toLocaleString("th-TH")} เต็มจำนวน</p>` +
-      `<p>เงินจะกลับเข้าช่องทางที่คุณชำระภายในไม่กี่วันทำการ</p>`,
-  });
+/**
+ * A refund's new status (e.g. PromptPay's requires_action → pending → succeeded, or a card refund
+ * that fails days later). failed and canceled are final, so an older event delivered late can't
+ * undo them; the buyer hears about a failure once.
+ */
+async function settleRefund(stripeRefund: Stripe.Refund) {
+  const [updated] = await db
+    .update(refunds)
+    .set({ status: toRefundStatus(stripeRefund.status), failureReason: stripeRefund.failure_reason ?? null })
+    .where(and(eq(refunds.stripeRefundId, stripeRefund.id), notInArray(refunds.status, ["failed", "canceled"])))
+    .returning();
+  if (updated) {
+    if (updated.status === "failed") await mailRefundFailed(updated);
+    return;
+  }
+  // ours (it carries our metadata) but not recorded: the request that made it hasn't committed
+  // yet, so throw and let Stripe deliver it again. Refunds made in the Stripe Dashboard are ignored.
+  if (stripeRefund.metadata?.paymentId) {
+    const [known] = await db.select({ id: refunds.id }).from(refunds).where(eq(refunds.stripeRefundId, stripeRefund.id));
+    if (!known) throw new Error(`Refund ${stripeRefund.id} isn't recorded yet`);
+  }
 }
 
 /**

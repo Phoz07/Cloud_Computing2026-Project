@@ -75,13 +75,13 @@ bunx stripe sandbox create --from-git    # หรือ --email you@example.com
    | Resource | สิทธิ์ | ใช้ที่ |
    |---|---|---|
    | Checkout Sessions (`checkout_session_write`) | Write | `checkout.sessions.create` ใน `routes/checkout/service.ts` |
-   | Charges and Refunds (`charge_write`) | Write | `refunds.create` ใน `routes/webhook/service.ts` |
+   | Charges and Refunds (`charge_write`) | Write | `refunds.create` ใน `libs/refund.ts` (ผู้ซื้อ/ผู้จัดงานคืนเงิน และเงินที่เข้าหลังหมดเวลาจอง) |
 
 3. คัดลอกคีย์ไปใส่ `.env` ที่ root: `STRIPE_SECRET_KEY=rk_test_…`
 
 ข้อควรรู้:
 - **ไม่ต้องใช้ publishable key** (`pk_test_…`) เพราะหน้าชำระเงินเป็นหน้าของ Stripe เว็บของเราไม่ได้โหลด Stripe.js
-- **สิทธิ์ refund ขาดไม่ได้:** ระบบใช้ refund เฉพาะตอนเงินเข้าหลังหมดเวลาจอง ถ้าลืมให้สิทธิ์นี้ จะไม่เห็นปัญหาจนวันที่เกิดกรณีนั้น แล้ว webhook จะตอบ 500 ซ้ำๆ
+- **สิทธิ์ refund ขาดไม่ได้:** ถ้าลืมให้ ปุ่มขอคืนเงินของผู้ซื้อและผู้จัดงานจะขึ้น "ระบบคืนเงินขัดข้อง" และ webhook ของเงินที่เข้าหลังหมดเวลาจองจะตอบ 500 ซ้ำๆ
 - **ถ้าเจอ 403 จาก Stripe:** เปิดคีย์ → **View request logs** แล้วเพิ่มสิทธิ์ที่ขาด ข้อความ error จะบอกชื่อสิทธิ์
 
 ## 4. เชื่อม Stripe CLI
@@ -108,11 +108,12 @@ bun run stripe:listen    # เปิดในเทอร์มินัลแ�
 
 `stripe:listen` (ใน `package.json` ที่ root) คือ `stripe listen --events … --forward-to localhost:5173/api/payment/webhook`
 
-- Stripe CLI รุ่นใหม่บังคับให้ระบุ event ที่จะส่งต่อ สคริปต์จึงระบุไว้ 4 ตัวที่ webhook ใช้:
+- Stripe CLI รุ่นใหม่บังคับให้ระบุ event ที่จะส่งต่อ สคริปต์จึงระบุไว้ 6 ตัวที่ webhook ใช้:
   - `checkout.session.completed`
   - `checkout.session.async_payment_succeeded`
   - `checkout.session.async_payment_failed`
   - `checkout.session.expired`
+  - `refund.updated`, `refund.failed`: สถานะของการคืนเงินที่เปลี่ยนภายหลัง (ดู [docs/tickets.md](tickets.md#7-การคืนเงิน))
 - event เหล่านี้ส่งแบบ snapshot ซึ่ง handler อ่าน `event.data.object` ได้
 
 ตั้งค่าครั้งแรก:
@@ -159,6 +160,12 @@ bun run stripe:listen    # เปิดในเทอร์มินัลแ�
 - **Event ซ้ำ:** `bunx stripe events resend evt_…` สถานะต้องไม่เปลี่ยนซ้ำ และต้องไม่มีอีเมลตั๋วฉบับที่สอง
 - **เช็กแค่ว่า webhook ต่อถึง:** `bunx stripe trigger checkout.session.completed`
   - คำสั่งนี้สร้าง session ปลอมที่ไม่มีใน DB ระบบควรตอบ `200` แต่ไม่ทำอะไร
+- **ขอคืนเงิน:**
+  1. ตั้งนโยบายคืนเงินของอีเวนต์ก่อนลงทะเบียน (นโยบายถูกบันทึกกับการลงทะเบียน ณ ตอนนั้น) แล้วจ่ายด้วย `4242…`
+  2. ผู้ซื้อเปิดตั๋ว → "ดูรายการสั่งซื้อ" → "ขอคืนเงิน" หรือผู้จัดงานเปิดแท็บผู้เข้าร่วม → "ดูรายละเอียด" → "คืนเงินเต็มจำนวน"
+  3. รายการควรเป็น "ยกเลิกแล้ว" ทันที ที่นั่งกลับมาว่าง และใน Dashboard ของ Stripe ขึ้น refund ตามเปอร์เซ็นต์ที่คืน
+  4. แท็บ "คืนเงิน" ของอีเวนต์แสดงรายการนั้น
+- **คืนเงินไม่สำเร็จ:** จ่ายด้วยบัตรทดสอบที่ทำให้ refund ล้มเหลวภายหลัง (ดูหัวข้อ Refunds ใน[รายการบัตรทดสอบ](https://docs.stripe.com/testing)) แล้วขอคืนเงิน เมื่อ `refund.failed` มาถึง แท็บ "คืนเงิน" ควรขึ้น "คืนเงินไม่สำเร็จ" และผู้ซื้อได้อีเมลแจ้ง
 
 ## 7. แก้ปัญหา
 
@@ -171,6 +178,8 @@ bun run stripe:listen    # เปิดในเทอร์มินัลแ�
 | ขึ้น `<-- [500]` | handler พัง เช่น DB ล่ม หรือคีย์ไม่มีสิทธิ์ refund | ดู log ของ `apps/payment` แก้ต้นเหตุ แล้วส่ง event ซ้ำ |
 | ขึ้น `connection refused` | ไม่ได้รัน `bun run dev` หรือ payment service ล่ม | เปิด `bun run dev` แล้วส่ง event ซ้ำ |
 | กดชำระเงินแล้วขึ้น "ระบบชำระเงินขัดข้อง" | สร้าง Checkout session ไม่ได้ เช่น ไม่ได้ตั้ง `STRIPE_SECRET_KEY` คีย์ผิด หรือคีย์ไม่มีสิทธิ์ Checkout Sessions | ดู log `Failed to create a Stripe Checkout session` ของ `apps/payment` |
+| กดคืนเงินแล้วขึ้น "ระบบคืนเงินขัดข้อง" | เรียก `refunds.create` ไม่สำเร็จ เช่น คีย์ไม่มีสิทธิ์ Charges and Refunds หรือ Stripe ล่ม รายการยังไม่ถูกยกเลิก | ดู log `Failed to create a Stripe refund` แก้ต้นเหตุแล้วกดใหม่ |
+| กดคืนเงินแล้วขึ้น "Stripe คืนเงินรายการนี้ไม่ได้" | Stripe ปฏิเสธ เช่น ชำระนานเกินกำหนดคืนเงิน หรือคืนเงินไปแล้วจาก Dashboard ของ Stripe | ดู log เดียวกันว่า Stripe ตอบอะไร แล้วคืนเงินทางอื่น |
 | payment service ไม่ยอมเริ่ม: `Refusing to use a live Stripe key outside production` | ใส่ live key ในเครื่อง | ใช้คีย์ของ sandbox |
 
 **กู้บิลที่ค้าง:** event ไม่หายไปไหน แก้ต้นเหตุก่อน แล้วสั่งส่งซ้ำมาที่ `stripe:listen` ที่เปิดอยู่
@@ -192,7 +201,7 @@ bunx stripe events resend evt_…
 2. **ลงทะเบียน endpoint:** ใน Dashboard (sandbox หรือ live) ไปที่ **Workbench → Webhooks → Create an event destination**
    - เลือก **Your account**
    - Payload format เลือก **Snapshot** ห้ามเลือก Thin เพราะ handler อ่าน `event.data.object` ซึ่ง thin event ไม่มี
-   - เลือก event 4 ตัวเดียวกับใน[หัวข้อ 5](#5-รับ-webhook-ในเครื่อง)
+   - เลือก event 6 ตัวเดียวกับใน[หัวข้อ 5](#5-รับ-webhook-ในเครื่อง) (รวม `refund.updated` และ `refund.failed`)
    - Destination type เลือก **Webhook endpoint** แล้วใส่ URL จากข้อ 1
 3. **ตั้งค่า secret:** กด **Reveal secret** แล้วเอา `whsec_…` ไปใส่ `STRIPE_WEBHOOK_SECRET` ของ production
    - ค่านี้คนละตัวกับของ CLI และ sandbox กับ live ก็คนละตัวกัน
@@ -215,5 +224,7 @@ bunx stripe events resend evt_…
 | `.env.example` | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` |
 | `apps/payment/src/libs/stripe.ts` | Stripe client, กันใช้ live key นอก production, `webhookSecret` |
 | `apps/payment/src/routes/checkout/` | สร้างหรือใช้ Checkout session เดิม |
-| `apps/payment/src/routes/webhook/` | ตรวจลายเซ็นและจัดการ 4 event |
+| `apps/payment/src/routes/refunds/` | ผู้ซื้อขอคืนเงินตามนโยบาย, ผู้จัดงานคืนเงินเต็มจำนวน, ประวัติการคืนเงินของอีเวนต์ |
+| `apps/payment/src/libs/refund.ts` | `refunds.create` พร้อม idempotency key และบันทึกลงตาราง `refunds` |
+| `apps/payment/src/routes/webhook/` | ตรวจลายเซ็นและจัดการ 6 event |
 | `docs/tickets.md` | วงจรการชำระเงิน การคืนเงิน และข้อจำกัด |

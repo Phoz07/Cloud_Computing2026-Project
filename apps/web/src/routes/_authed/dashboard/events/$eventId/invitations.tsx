@@ -173,6 +173,18 @@ function InvitationsTab() {
                 icon: SearchX,
                 title: "ไม่พบผู้ได้รับเชิญที่ตรงกับตัวกรอง",
                 description: q ? `ไม่มีอีเมลหรือชื่อที่ตรงกับ “${q}”` : "ลองเลือกสถานะอื่น",
+                action: filtered && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSearch("");
+                      void navigate({ search: {} });
+                    }}
+                  >
+                    <X data-icon="inline-start" />
+                    ล้างตัวกรอง
+                  </Button>
+                ),
               }}
               pagination={{
                 state: { pageIndex: page - 1, pageSize: PAGE_SIZE },
@@ -182,20 +194,6 @@ function InvitationsTab() {
               }}
             />
           </div>
-          {filtered && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="self-start"
-              onClick={() => {
-                setSearch("");
-                void navigate({ search: {} });
-              }}
-            >
-              <X data-icon="inline-start" />
-              ล้างตัวกรอง
-            </Button>
-          )}
         </>
       )}
 

@@ -2,13 +2,14 @@ import { useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createColumnHelper } from "@tanstack/react-table";
 import {
-  ArrowLeft, BadgeCheck, Check, ClipboardCheck, Eye, Mail, MessageSquareText, Ticket, UserRound, UserX, X,
+  ArrowLeft, BadgeCheck, Check, ClipboardCheck, Eye, Mail, MessageSquareText, Ticket, Undo2, UserRound, UserX, X,
 } from "lucide-react";
 import { useState } from "react";
 import { z } from "zod";
 import type { DataTableFeatures } from "@/components/data-table/data-table-features";
 import { EnrollmentStatusBadge } from "@/components/enrollment-status-badge";
 import { SubmitButton, TextField } from "@/components/form-field";
+import { RefundStatusBadge } from "@/components/refund-status-badge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,10 +36,10 @@ import {
 import { FieldGroup } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
-import { registrationClient } from "@/lib/api";
+import { paymentClient, registrationClient } from "@/lib/api";
 import { problemMessage } from "@/lib/auth-errors";
 import { enrollmentsKey, type Enrollment } from "@/lib/enrollments";
-import { formatDateTime, formatPrice } from "@/lib/format";
+import { formatBaht, formatDateTime, formatPrice } from "@/lib/format";
 import { kindInfo } from "@/lib/ticket-types";
 
 const columnHelper = createColumnHelper<DataTableFeatures, Enrollment>();
@@ -109,14 +110,15 @@ function useReviewed() {
 }
 
 /**
- * The whole enrollment: every attendee and their answers, plus approve / reject for a pending one.
- * Rejecting is a step inside this dialog; approving opens a nested confirm dialog, and
- * DialogContent sinks back behind it (data-nested-dialog-open).
+ * The whole enrollment: every attendee and their answers, plus approve / reject for a pending one
+ * and a full refund for a confirmed paid one. Rejecting is a step inside this dialog; approving and
+ * refunding open a nested confirm dialog, and DialogContent sinks back behind it (data-nested-dialog-open).
  */
 function EnrollmentDialog({ enrollment, locked }: { enrollment: Enrollment; locked: boolean }) {
   const [open, setOpen] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const reviewable = enrollment.status === "pending" && !locked;
+  const refundable = enrollment.status === "confirmed" && enrollment.total > 0 && !locked;
   const close = () => setOpen(false);
   const buyerName = enrollment.buyer?.name ?? "ผู้ใช้ที่ลบบัญชีแล้ว";
 
@@ -145,6 +147,14 @@ function EnrollmentDialog({ enrollment, locked }: { enrollment: Enrollment; lock
               </DialogHeader>
               <div className="-mx-6 flex max-h-[60vh] flex-col gap-4 overflow-y-auto px-6">
                 <EnrollmentStatusBadge enrollment={enrollment} />
+                {enrollment.refunds.map((refund) => (
+                  <div key={refund.id} className="flex flex-wrap items-center gap-2 text-sm">
+                    <Undo2 className="size-4 text-muted-foreground" />
+                    คืนเงิน {formatBaht(refund.amount)} ({refund.percent}%)
+                    <RefundStatusBadge status={refund.status} />
+                    <span className="text-xs text-muted-foreground">{formatDateTime(refund.createdAt)}</span>
+                  </div>
+                ))}
                 <ol className="flex flex-col gap-3">
                   {enrollment.tickets.map((ticket, index) => (
                     <li key={ticket.id} className="flex flex-col gap-3 rounded-2xl border p-4 text-sm">
@@ -184,6 +194,11 @@ function EnrollmentDialog({ enrollment, locked }: { enrollment: Enrollment; lock
                     ไม่อนุมัติ
                   </Button>
                   <ApproveButton enrollment={enrollment} buyerName={buyerName} onDone={close} />
+                </DialogFooter>
+              )}
+              {refundable && (
+                <DialogFooter>
+                  <RefundButton enrollment={enrollment} buyerName={buyerName} onDone={close} />
                 </DialogFooter>
               )}
             </>
@@ -323,5 +338,93 @@ function RejectForm({
         </form.Subscribe>
       </DialogFooter>
     </form>
+  );
+}
+
+const refundSchema = z.object({ note: z.string().trim().max(500, "ยาวได้ไม่เกิน 500 ตัวอักษร") });
+
+/** Cancels a confirmed paid order and refunds all of it, whatever its policy says (e.g. the event is called off). */
+function RefundButton({ enrollment, buyerName, onDone }: { enrollment: Enrollment; buyerName: string; onDone: () => void }) {
+  const reviewed = useReviewed();
+  const [open, setOpen] = useState(false);
+  const form = useForm({
+    defaultValues: { note: "" },
+    validators: { onSubmit: refundSchema },
+    onSubmit: async ({ value }) => {
+      const { data, error } = await paymentClient.api.payment.enrollments({ id: enrollment.id }).refund.post({
+        note: value.note.trim() || undefined,
+      });
+      if (error) {
+        toast.add({ type: "error", title: problemMessage(error) });
+        return void reviewed();
+      }
+      toast.add({
+        type: "success",
+        title: `คืนเงิน ${formatBaht(data.amount)} ให้ ${buyerName} แล้ว`,
+        description: "ยกเลิกรายการ และส่งอีเมลแจ้งผู้ซื้อและผู้เข้าร่วมแล้ว",
+      });
+      onDone();
+      await reviewed();
+    },
+  });
+
+  return (
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => !form.state.isSubmitting && setOpen(next)}
+      onOpenChangeComplete={(next) => !next && form.reset()}
+    >
+      <AlertDialogTrigger render={<Button variant="outline" />}>
+        <Undo2 data-icon="inline-start" />
+        คืนเงินเต็มจำนวน
+      </AlertDialogTrigger>
+      <AlertDialogContent size="sm">
+        {/* contents: the header, field and footer stay items of the dialog's grid */}
+        <form
+          noValidate
+          className="contents"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void form.handleSubmit();
+          }}
+        >
+          <AlertDialogHeader>
+            <AlertDialogMedia className="bg-destructive/10 text-destructive">
+              <Undo2 />
+            </AlertDialogMedia>
+            <AlertDialogTitle>คืนเงินให้ {buyerName}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              คืน {formatPrice(enrollment.total)} เต็มจำนวน และยกเลิกตั๋วทั้ง {enrollment.quantity} ใบ ย้อนกลับไม่ได้
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <FieldGroup>
+            <form.Field name="note">
+              {(field) => (
+                <TextField
+                  field={field}
+                  label="ข้อความถึงผู้ซื้อ (ไม่บังคับ)"
+                  icon={MessageSquareText}
+                  multiline
+                  placeholder="เช่น งานเลื่อนออกไปไม่มีกำหนด"
+                />
+              )}
+            </form.Field>
+          </FieldGroup>
+          <form.Subscribe selector={(state) => state.isSubmitting}>
+            {(isSubmitting) => (
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={isSubmitting}>
+                  <ArrowLeft data-icon="inline-start" />
+                  กลับ
+                </AlertDialogCancel>
+                <SubmitButton pending={isSubmitting} icon={Undo2} variant="destructive">
+                  คืนเงิน
+                </SubmitButton>
+              </AlertDialogFooter>
+            )}
+          </form.Subscribe>
+        </form>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

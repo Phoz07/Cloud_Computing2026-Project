@@ -11,6 +11,7 @@ export const Status = t.Union([
   t.Literal("confirmed"),
   t.Literal("rejected"),
   t.Literal("expired"),
+  t.Literal("cancelled"),
 ]);
 export type Status = UnwrapSchema<typeof Status>;
 
@@ -41,6 +42,24 @@ export const Attendee = t.Object({
   answers: t.Array(Answer),
 });
 
+export const RefundStatus = t.Union([
+  t.Literal("pending"),
+  t.Literal("requires_action"),
+  t.Literal("succeeded"),
+  t.Literal("failed"),
+  t.Literal("canceled"),
+]);
+
+export const Refund = t.Object({
+  id: t.String(),
+  // THB
+  amount: t.Number(),
+  percent: t.Number(),
+  status: RefundStatus,
+  initiatedBy: t.Union([t.Literal("buyer"), t.Literal("organizer"), t.Literal("system")]),
+  createdAt: t.String(),
+});
+
 export const Enrollment = t.Object({
   id: t.String(),
   status: Status,
@@ -53,6 +72,11 @@ export const Enrollment = t.Object({
   createdAt: t.String(),
   reviewedAt: Nullable(t.String()),
   confirmedAt: Nullable(t.String()),
+  cancelledAt: Nullable(t.String()),
+  // what the buyer gets back by cancelling, under the policy they ordered with; null = no refunds
+  refundTerms: Nullable(t.Object({ percent: t.Number(), amount: t.Number(), deadline: t.String() })),
+  // oldest first; a cancelled order has the one that cancelled it
+  refunds: t.Array(Refund),
   event: EventSummary,
   ticketType: TicketTypeSummary,
   // null once the buyer deleted their account
@@ -99,6 +123,7 @@ export const StatusCounts = t.Object({
   confirmed: t.Number(),
   rejected: t.Number(),
   expired: t.Number(),
+  cancelled: t.Number(),
 });
 
 export const EventsByEventIdEnrollmentsGet = {

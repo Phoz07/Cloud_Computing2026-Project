@@ -1,9 +1,9 @@
 import { queryOptions } from "@tanstack/react-query";
-import { CircleCheckBig, CircleX, Clock, CreditCard, Hourglass, type LucideIcon } from "lucide-react";
+import { CircleCheckBig, CircleX, Clock, CreditCard, Hourglass, Undo2, type LucideIcon } from "lucide-react";
 import { registrationClient } from "./api";
 import { retryUnlessClientError } from "./events";
 
-export type EnrollmentStatus = "pending" | "awaiting_payment" | "confirmed" | "rejected" | "expired";
+export type EnrollmentStatus = "pending" | "awaiting_payment" | "confirmed" | "rejected" | "expired" | "cancelled";
 
 type BadgeVariant = "secondary" | "default" | "outline" | "destructive";
 
@@ -13,6 +13,7 @@ export const enrollmentStatusInfo: Record<EnrollmentStatus, { label: string; ico
   confirmed: { label: "ยืนยันแล้ว", icon: CircleCheckBig, variant: "default" },
   rejected: { label: "ไม่อนุมัติ", icon: CircleX, variant: "destructive" },
   expired: { label: "หมดเวลา", icon: Clock, variant: "outline" },
+  cancelled: { label: "ยกเลิกแล้ว", icon: Undo2, variant: "outline" },
 };
 
 export const enrollmentsKey = ["enrollments"] as const;

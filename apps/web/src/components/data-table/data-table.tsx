@@ -6,8 +6,9 @@ import {
   type RowData,
 } from "@tanstack/react-table";
 import { ChevronLeft, ChevronRight, type LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { features, type DataTableFeatures } from "./data-table-features";
@@ -16,7 +17,7 @@ type DataTableProps<TData extends RowData> = {
   columns: ColumnDef<DataTableFeatures, TData, any>[];
   data: TData[];
   isLoading?: boolean;
-  empty: { icon: LucideIcon; title: string; description?: string };
+  empty: { icon: LucideIcon; title: string; description?: string; action?: ReactNode };
   /** Server-side pagination: the query owns the page state and returns the total row count. */
   pagination?: {
     state: PaginationState;
@@ -29,7 +30,7 @@ export function DataTable<TData extends RowData>({
   columns,
   data,
   isLoading,
-  empty: { icon: EmptyIcon, title, description },
+  empty: { icon: EmptyIcon, title, description, action },
   pagination,
 }: DataTableProps<TData>) {
   const table = useTable({
@@ -94,6 +95,7 @@ export function DataTable<TData extends RowData>({
                       <EmptyTitle>{title}</EmptyTitle>
                       {description && <EmptyDescription>{description}</EmptyDescription>}
                     </EmptyHeader>
+                    {action && <EmptyContent>{action}</EmptyContent>}
                   </Empty>
                 </TableCell>
               </TableRow>

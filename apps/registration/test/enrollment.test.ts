@@ -205,6 +205,27 @@ describe("first come, first served", () => {
     expect(await availabilityOf(eventId, type.id)).toMatchObject({ reserved: 0, remaining: 2, state: "open" });
     expect((await json(await request("GET", `/enrollments/${enrollment.id}`, "buyer"))).status).toBe("expired");
   });
+
+  test("an order keeps the refund policy it was made with; a cancelled one frees its seats", async () => {
+    const eventId = await createEvent();
+    const type = await createType(eventId, { price: 300, quota: 2 });
+    expect((await json(await enroll(type.id))).refundTerms).toBeNull();
+
+    await db.update(events).set({ isRefundAvailable: true, refundCutoffHours: 24, refundPercent: 50 }).where(eq(events.id, eventId));
+    const enrollment = await json(await enroll(type.id));
+    const deadline = new Date(Date.parse(enrollment.event.startsAt) - 24 * 3_600_000).toISOString();
+    expect(enrollment).toMatchObject({ refundTerms: { percent: 50, amount: 150, deadline }, refunds: [], cancelledAt: null });
+
+    // the organizer changes the policy afterwards
+    await db.update(events).set({ isRefundAvailable: false, refundCutoffHours: null, refundPercent: null }).where(eq(events.id, eventId));
+    expect((await json(await request("GET", `/enrollments/${enrollment.id}`, "buyer"))).refundTerms).toMatchObject({ percent: 50 });
+
+    // as apps/payment cancels it on a refund
+    await db.update(enrollments).set({ status: "cancelled", cancelledAt: new Date() }).where(eq(enrollments.id, enrollment.id));
+    expect((await json(await request("GET", `/enrollments/${enrollment.id}`, "buyer"))).status).toBe("cancelled");
+    expect(await availabilityOf(eventId, type.id)).toMatchObject({ reserved: 1, remaining: 1 });
+    expect((await json(await request("GET", `/events/${eventId}/enrollments`, "owner"))).counts).toMatchObject({ cancelled: 1 });
+  });
 });
 
 describe("invite only", () => {

@@ -20,7 +20,7 @@ function DashboardLayout() {
       <SidebarInset>
         <header className="flex h-12 items-center gap-2 border-b px-4">
           <SidebarTrigger />
-          <Separator orientation="vertical" className="h-4" />
+          <Separator orientation="vertical" className="h-4 data-vertical:self-auto" />
           <span className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
             <LayoutDashboard className="size-4" />
             แดชบอร์ด

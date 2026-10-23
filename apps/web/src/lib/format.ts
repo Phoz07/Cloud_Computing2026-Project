@@ -26,6 +26,11 @@ const baht = new Intl.NumberFormat("th-TH", { style: "currency", currency: "THB"
 /** "฿1,200", or "ฟรี" for 0 */
 export const formatPrice = (value: number) => (value === 0 ? "ฟรี" : baht.format(value));
 
+const bahtSatang = new Intl.NumberFormat("th-TH", { style: "currency", currency: "THB" });
+
+/** "฿1,200", or "฿62.50" when there are satang (a partial refund can have them) */
+export const formatBaht = (value: number) => (Number.isInteger(value) ? baht : bahtSatang).format(value);
+
 /** "3 ชั่วโมง 30 นาที", "2 วัน 4 ชั่วโมง" */
 export function formatDuration(ms: number) {
   const minutes = Math.round(ms / 60_000);

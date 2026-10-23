@@ -125,6 +125,9 @@ export async function enroll(buyer: Viewer, input: EnrollmentModel.Post["Body"])
         status,
         invitationId,
         expiresAt: status === "awaiting_payment" ? new Date(Date.now() + PAYMENT_HOLD_MS) : null,
+        // the policy the buyer ordered under; later edits to the event don't change it
+        refundPercent: event.isRefundAvailable ? event.refundPercent : null,
+        refundCutoffHours: event.isRefundAvailable ? event.refundCutoffHours : null,
       })
       .returning({ id: enrollments.id, invitationId: enrollments.invitationId });
     // uuidv7 ids sort in attendee order; the rows share one created_at
@@ -192,7 +195,7 @@ export async function listEventEnrollments(
       .where(scope)
       .groupBy(effectiveStatusSql),
   ]);
-  const counts = { pending: 0, awaiting_payment: 0, confirmed: 0, rejected: 0, expired: 0 };
+  const counts = { pending: 0, awaiting_payment: 0, confirmed: 0, rejected: 0, expired: 0, cancelled: 0 };
   for (const { status, total } of byStatus) counts[status] = total;
   const total = query.status ? counts[query.status] : byStatus.reduce((sum, row) => sum + row.total, 0);
   return { items: await loadEnrollments(rows.map((row) => row.id)), total, counts };

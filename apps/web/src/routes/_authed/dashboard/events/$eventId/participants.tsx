@@ -18,7 +18,7 @@ import { enrollmentColumns } from "./-components/enrollments-columns";
 import { useEventDetail } from "./-components/use-event-detail";
 
 const PAGE_SIZE = 10;
-const STATUSES = ["pending", "awaiting_payment", "confirmed", "rejected", "expired"] as const;
+const STATUSES = ["pending", "awaiting_payment", "confirmed", "rejected", "expired", "cancelled"] as const;
 const ALL_TYPES = "all";
 
 // filters live in the URL, like the invitations tab
@@ -183,6 +183,18 @@ function ParticipantsTab() {
                 icon: SearchX,
                 title: "ไม่พบการลงทะเบียนที่ตรงกับตัวกรอง",
                 description: q ? `ไม่มีชื่อหรืออีเมลที่ตรงกับ “${q}”` : "ลองเลือกสถานะหรือประเภทตั๋วอื่น",
+                action: filtered && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSearch("");
+                      void navigate({ search: {} });
+                    }}
+                  >
+                    <X data-icon="inline-start" />
+                    ล้างตัวกรอง
+                  </Button>
+                ),
               }}
               pagination={{
                 state: { pageIndex: page - 1, pageSize: PAGE_SIZE },
@@ -192,20 +204,6 @@ function ParticipantsTab() {
               }}
             />
           </div>
-          {filtered && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="self-start"
-              onClick={() => {
-                setSearch("");
-                void navigate({ search: {} });
-              }}
-            >
-              <X data-icon="inline-start" />
-              ล้างตัวกรอง
-            </Button>
-          )}
         </>
       )}
     </div>

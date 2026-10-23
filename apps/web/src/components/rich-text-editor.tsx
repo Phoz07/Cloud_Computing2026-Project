@@ -183,13 +183,13 @@ export function RichTextEditor({
           <ToolbarToggle label="ตัวเอียง" icon={Italic} shortcut={`${mod}I`} pressed={state.italic} disabled={disabled} onToggle={() => chain().toggleItalic().run()} />
           <ToolbarToggle label="ขีดเส้นใต้" icon={Underline} shortcut={`${mod}U`} pressed={state.underline} disabled={disabled} onToggle={() => chain().toggleUnderline().run()} />
           <ToolbarToggle label="ขีดทับ" icon={Strikethrough} pressed={state.strike} disabled={disabled} onToggle={() => chain().toggleStrike().run()} />
-          <Separator orientation="vertical" className="mx-1 h-5" />
+          <Separator orientation="vertical" className="mx-1 h-5 data-vertical:self-auto" />
           <ToolbarToggle label="หัวข้อใหญ่" icon={Heading2} pressed={state.h2} disabled={disabled} onToggle={() => chain().toggleHeading({ level: 2 }).run()} />
           <ToolbarToggle label="หัวข้อรอง" icon={Heading3} pressed={state.h3} disabled={disabled} onToggle={() => chain().toggleHeading({ level: 3 }).run()} />
           <ToolbarToggle label="รายการ" icon={List} pressed={state.bullet} disabled={disabled} onToggle={() => chain().toggleBulletList().run()} />
           <ToolbarToggle label="รายการเลขลำดับ" icon={ListOrdered} pressed={state.ordered} disabled={disabled} onToggle={() => chain().toggleOrderedList().run()} />
           <ToolbarToggle label="ข้อความอ้างอิง" icon={Quote} pressed={state.quote} disabled={disabled} onToggle={() => chain().toggleBlockquote().run()} />
-          <Separator orientation="vertical" className="mx-1 h-5" />
+          <Separator orientation="vertical" className="mx-1 h-5 data-vertical:self-auto" />
           <LinkButton editor={editor} active={state.link} disabled={disabled} />
           <ToolbarButton label="แทรกรูปภาพ" icon={ImagePlus} disabled={disabled} onClick={() => fileInput.current?.click()} />
           <input
@@ -203,7 +203,7 @@ export function RichTextEditor({
               e.target.value = "";
             }}
           />
-          <Separator orientation="vertical" className="mx-1 h-5" />
+          <Separator orientation="vertical" className="mx-1 h-5 data-vertical:self-auto" />
           <ToolbarButton label="เลิกทำ" icon={Undo2} shortcut={`${mod}Z`} disabled={disabled || !state.canUndo} onClick={() => chain().undo().run()} />
           <ToolbarButton label="ทำซ้ำ" icon={Redo2} shortcut={isMac ? "⇧⌘Z" : "Ctrl+Y"} disabled={disabled || !state.canRedo} onClick={() => chain().redo().run()} />
           {uploading > 0 && (

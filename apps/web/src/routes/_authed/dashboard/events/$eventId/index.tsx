@@ -531,7 +531,9 @@ function EventEditor({ event }: { event: EventDetail }) {
                         />
                         <FieldContent>
                           <FieldLabel htmlFor="isRefundAvailable">เปิดให้ขอคืนเงิน</FieldLabel>
-                          <FieldDescription>ผู้ซื้อขอคืนเงินได้ก่อนงานเริ่มตามเงื่อนไข</FieldDescription>
+                          <FieldDescription>
+                            ผู้ซื้อยกเลิกและรับเงินคืนเองได้ก่อนงานเริ่มตามเงื่อนไข การแก้ไขมีผลกับการลงทะเบียนใหม่เท่านั้น
+                          </FieldDescription>
                         </FieldContent>
                       </Field>
                     )}

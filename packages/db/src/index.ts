@@ -11,3 +11,5 @@ export {
   eq, ne, and, or, not, inArray, notInArray, isNull, isNotNull, desc, asc, sql, count, ilike, lt, lte, gt, gte,
   type SQL,
 } from "drizzle-orm";
+// a table under another name, to join it twice (e.g. users as buyer and as requester)
+export { alias } from "drizzle-orm/pg-core";

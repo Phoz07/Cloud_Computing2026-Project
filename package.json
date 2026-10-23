@@ -16,7 +16,7 @@
     "db:migrate": "bun run --filter @app/db db:migrate",
     "db:studio": "bun run --filter @app/db db:studio",
     "dev": "bun run --parallel --filter './apps/*' dev",
-    "stripe:listen": "stripe listen --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,checkout.session.expired --forward-to localhost:5173/api/payment/webhook",
+    "stripe:listen": "stripe listen --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,checkout.session.expired,refund.updated,refund.failed --forward-to localhost:5173/api/payment/webhook",
     "typecheck": "bun check"
   },
   "devDependencies": {

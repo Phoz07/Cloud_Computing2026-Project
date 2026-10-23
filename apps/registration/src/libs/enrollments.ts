@@ -1,6 +1,6 @@
-import { asc, db, enrollments, eq, events, inArray, sql, tickets, ticketTypes, users } from "@app/db";
+import { asc, db, enrollments, eq, events, inArray, refunds, sql, tickets, ticketTypes, users } from "@app/db";
 import { fileUrl } from "@app/storage";
-import { effectiveStatus } from "@app/tickets";
+import { effectiveStatus, refundTerms } from "@app/tickets";
 import type * as EnrollmentModel from "../routes/enrollments/model";
 
 type EventRow = typeof events.$inferSelect;
@@ -20,10 +20,10 @@ export const toEventSummary = (event: EventRow): EnrollmentModel.EventSummary =>
 /** The status as read: `awaiting_payment` past its hold is `expired` (effectiveStatus, in SQL). */
 export const effectiveStatusSql = sql<EnrollmentModel.Status>`(case when ${enrollments.status} = 'awaiting_payment' and ${enrollments.expiresAt} <= now() then 'expired' else ${enrollments.status}::text end)`;
 
-/** Enrollments with their event, ticket type, buyer and tickets, in the order of `ids`. */
+/** Enrollments with their event, ticket type, buyer, tickets and refunds, in the order of `ids`. */
 export async function loadEnrollments(ids: string[]): Promise<EnrollmentModel.Enrollment[]> {
   if (ids.length === 0) return [];
-  const [rows, ticketRows] = await Promise.all([
+  const [rows, ticketRows, refundRows] = await Promise.all([
     db
       .select({
         enrollment: enrollments,
@@ -41,6 +41,11 @@ export async function loadEnrollments(ids: string[]): Promise<EnrollmentModel.En
       .from(tickets)
       .where(inArray(tickets.enrollmentId, ids))
       .orderBy(asc(tickets.createdAt), asc(tickets.id)),
+    db
+      .select()
+      .from(refunds)
+      .where(inArray(refunds.enrollmentId, ids))
+      .orderBy(asc(refunds.createdAt)),
   ]);
   const byId = new Map(rows.map((row) => [row.enrollment.id, row]));
 
@@ -50,6 +55,7 @@ export async function loadEnrollments(ids: string[]): Promise<EnrollmentModel.En
     const { enrollment } = row;
     const status = effectiveStatus(enrollment);
     const unitPrice = Number(enrollment.unitPrice);
+    const terms = refundTerms(enrollment, row.event);
     return {
       id: enrollment.id,
       status,
@@ -60,6 +66,18 @@ export async function loadEnrollments(ids: string[]): Promise<EnrollmentModel.En
       createdAt: enrollment.createdAt.toISOString(),
       reviewedAt: iso(enrollment.reviewedAt),
       confirmedAt: iso(enrollment.confirmedAt),
+      cancelledAt: iso(enrollment.cancelledAt),
+      refundTerms: terms && { ...terms, deadline: terms.deadline.toISOString() },
+      refunds: refundRows
+        .filter((refund) => refund.enrollmentId === id)
+        .map((refund) => ({
+          id: refund.id,
+          amount: Number(refund.amount),
+          percent: refund.percent,
+          status: refund.status,
+          initiatedBy: refund.initiatedBy,
+          createdAt: refund.createdAt.toISOString(),
+        })),
       event: toEventSummary(row.event),
       ticketType: row.ticketType,
       buyer: row.buyer,
