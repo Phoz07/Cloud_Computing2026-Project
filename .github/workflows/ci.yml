@@ -37,6 +37,7 @@ jobs:
           until docker compose exec -T postgres pg_isready -U postgres; do sleep 1; done
           docker compose wait minio-init || true
       - run: bun install --frozen-lockfile
+      - run: bash scripts/lib.test.sh
       - run: bun run db:migrate
       - name: test the packages and services that have a test script
         run: |

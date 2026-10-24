@@ -28,9 +28,8 @@ CLUSTER=eventide
 REG_PORT=5111                              # host -> k3d registry (container :5000)
 REG_INCLUSTER="eventide-registry:${REG_PORT}"
 INGRESS_VERSION=4.15.1
-IMAGES="auth event registration payment mail-worker web db-bootstrap"
-SERVICES="auth event registration payment mail-worker web" # chart deployments we build
-dockerfile_for() { case "$1" in db-bootstrap) echo packages/db/Dockerfile ;; *) echo "apps/$1/Dockerfile" ;; esac; }
+IMAGES="${IMAGES:-auth event registration payment mail-worker web db-bootstrap}"
+. "$ROOT/scripts/lib.sh"
 TAG="${1:-$(git rev-parse --short HEAD)}"
 
 # Dev-only values (match .env.example so `make dev` and `make k3d` share a database).
@@ -120,8 +119,7 @@ helm upgrade --install eventide infra/helm/eventide --namespace eventide \
   -f infra/helm/eventide/values.yaml \
   -f infra/helm/eventide/values.local.yaml \
   --set imageRegistry="${REG_INCLUSTER}" \
-  --set dbMigrate.image.tag="$TAG" \
-  $(for s in $SERVICES; do echo --set services.$s.image.tag=$TAG; done) \
+  $(helm_tag_sets "$TAG" $IMAGES) $(keep_sets $IMAGES) \
   --wait --timeout 300s
 
 echo

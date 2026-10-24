@@ -28,13 +28,14 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 REGION=us-east-1
+# Every image by default. A subset (IMAGES="event web") builds, pushes AND pins
+# only those; the other Deployments keep their current tag (scripts/lib.sh).
 IMAGES="${IMAGES:-auth event registration payment mail-worker web db-bootstrap}"
-SERVICES="auth event registration payment mail-worker web" # chart deployments we build (+ redis, public image)
 TAG="${1:-$(git rev-parse --short HEAD)}"
+. "$ROOT/scripts/lib.sh"
 
 tf10() { terraform -chdir=infra/terraform/10-foundation output -raw "$1"; }
 tf20() { terraform -chdir=infra/terraform/20-platform output -raw "$1"; }
-dockerfile_for() { case "$1" in db-bootstrap) echo packages/db/Dockerfile ;; *) echo "apps/$1/Dockerfile" ;; esac; }
 
 REG="$(tf10 ecr_registry)"
 UPLOADS_BUCKET="$(tf10 uploads_bucket)"
@@ -111,11 +112,11 @@ helm upgrade --install eventide infra/helm/eventide --namespace eventide \
   --set imageRegistry="$REG" \
   --set publicUrl="$PUBLIC_URL" \
   --set files.bucket="$UPLOADS_BUCKET" \
-  --set dbMigrate.image.tag="$TAG" \
-  $(for s in $SERVICES; do echo --set services.$s.image.tag=$TAG; done) \
-  --wait --timeout 420s
+  $(helm_tag_sets "$TAG" $IMAGES) $(keep_sets $IMAGES) \
+  --wait --timeout 420s \
+  || { echo "helm failed — look at: helm -n eventide status eventide; kubectl -n eventide get pods; kubectl -n eventide logs job/db-migrate"; exit 1; }
 
-for d in $SERVICES redis; do
+for d in $APP_SERVICES redis; do
   kubectl -n eventide rollout status "deployment/$d" --timeout=180s
 done
 
