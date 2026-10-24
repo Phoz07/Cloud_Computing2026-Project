@@ -20,6 +20,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { Skeleton } from "@/components/ui/skeleton";
 import { availabilityQueryOptions, type Availability } from "@/lib/enrollments";
 import { formatPrice } from "@/lib/format";
+import { useLiveSeats } from "@/lib/live-seats";
 import { hasRole, useSession } from "@/lib/session";
 import { kindInfo, ticketTypesQueryOptions, type TicketType } from "@/lib/ticket-types";
 import { useEventDetail } from "../-components/use-event-detail";
@@ -34,6 +35,7 @@ function TicketsTab() {
   const locked = event.status === "suspended" && !hasRole(session?.user, ["admin"]);
   const { data: types, isPending } = useQuery(ticketTypesQueryOptions(event.id));
   const { data: availability } = useQuery(availabilityQueryOptions(event.id));
+  useLiveSeats(event.id);
   const params = { eventId: event.id };
 
   const addButton = locked ? (

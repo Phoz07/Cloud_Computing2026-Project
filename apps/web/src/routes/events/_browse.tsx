@@ -9,6 +9,7 @@ import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { EventCard } from "@/components/event-card";
 import { UserAvatar } from "@/components/user-avatar";
 import { categoriesQueryOptions, publicEventsQueryOptions } from "@/lib/events";
@@ -50,6 +51,8 @@ function EventsListPage() {
   const { data: categories, isError: categoriesError } = useQuery(categoriesQueryOptions);
   const category = slug ? categories?.find((c) => c.slug === slug) : undefined;
   const categoryMissing = !!slug && !!categories && !category;
+  // a category path keeps its title until the categories load
+  usePageTitle(slug ? category?.name : "สำรวจอีเวนต์");
   const { data, isError, isPlaceholderData } = useQuery({
     ...publicEventsQueryOptions({
       page,

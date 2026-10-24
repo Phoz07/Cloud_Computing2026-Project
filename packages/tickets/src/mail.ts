@@ -4,10 +4,6 @@ import { enqueueMail } from "@app/mail";
 /** The browser-facing origin, for links in mail. */
 export const appUrl = process.env.BETTER_AUTH_URL ?? "http://localhost:5173";
 
-// mail is read away from the browser, so the time is spelled out in Thailand's zone
-const mailTime = new Intl.DateTimeFormat("th-TH", { dateStyle: "full", timeStyle: "short", timeZone: "Asia/Bangkok" });
-export const formatMailTime = (date: Date) => mailTime.format(date);
-
 /** A same-site link, or the sign-up page that leads to it when nobody has registered `email` yet. */
 export const accountLink = (path: string, hasAccount: boolean) =>
   hasAccount ? `${appUrl}${path}` : `${appUrl}/register?redirect=${encodeURIComponent(path)}`;
@@ -40,21 +36,23 @@ export async function sendTicketMails(enrollmentId: string) {
     if (!order) return;
     const rows = await db.select().from(tickets).where(eq(tickets.enrollmentId, enrollmentId));
     const registered = await registeredEmails([...new Set(rows.map((row) => row.email))]);
+    const event = { title: order.title, venue: order.venue, startsAt: order.startsAt.toISOString() };
 
     await Promise.all(
       rows.map((ticket) => {
         const hasAccount = registered.has(ticket.email);
-        const name = Bun.escapeHTML(`${ticket.firstName} ${ticket.lastName}`);
         return enqueueMail({
           to: ticket.email,
-          subject: `ตั๋วของคุณ: ${order.title}`,
-          html:
-            `<p>สวัสดีคุณ ${name}</p>` +
-            `<p>ตั๋ว <strong>${Bun.escapeHTML(order.ticketType)}</strong> สำหรับอีเวนต์ <strong>${Bun.escapeHTML(order.title)}</strong> พร้อมแล้ว</p>` +
-            `<p>วันเวลา: ${formatMailTime(order.startsAt)}<br>สถานที่: ${Bun.escapeHTML(order.venue)}<br>` +
-            `รหัสตั๋ว: <strong style="font-family:monospace;letter-spacing:2px">${ticket.code}</strong></p>` +
-            `<p>${hasAccount ? "เข้าสู่ระบบ" : "สมัครสมาชิก"}ด้วยอีเมล ${Bun.escapeHTML(ticket.email)} เพื่อดูตั๋วและ QR code สำหรับเช็กอินที่หน้างาน</p>` +
-            `<p><a href="${accountLink(`/tickets/${ticket.id}`, hasAccount)}">${hasAccount ? "ดูตั๋ว" : "สมัครสมาชิกและดูตั๋ว"}</a></p>`,
+          template: "ticket",
+          props: {
+            name: `${ticket.firstName} ${ticket.lastName}`,
+            email: ticket.email,
+            ticketType: order.ticketType,
+            event,
+            code: ticket.code,
+            url: accountLink(`/tickets/${ticket.id}`, hasAccount),
+            hasAccount,
+          },
         }).catch((error) => console.error("Failed to enqueue ticket mail", error));
       }),
     );

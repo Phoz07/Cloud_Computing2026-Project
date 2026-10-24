@@ -1,6 +1,6 @@
-import { asc, db, enrollments, eq, events, inArray, refunds, sql, tickets, ticketTypes, users } from "@app/db";
+import { and, asc, db, enrollments, eq, events, inArray, refunds, sql, tickets, ticketTypes, users } from "@app/db";
 import { fileUrl } from "@app/storage";
-import { effectiveStatus, refundTerms } from "@app/tickets";
+import { activeEnrollment, effectiveStatus, refundTerms, type Tx } from "@app/tickets";
 import type * as EnrollmentModel from "../routes/enrollments/model";
 
 type EventRow = typeof events.$inferSelect;
@@ -19,6 +19,15 @@ export const toEventSummary = (event: EventRow): EnrollmentModel.EventSummary =>
 
 /** The status as read: `awaiting_payment` past its hold is `expired` (effectiveStatus, in SQL). */
 export const effectiveStatusSql = sql<EnrollmentModel.Status>`(case when ${enrollments.status} = 'awaiting_payment' and ${enrollments.expiresAt} <= now() then 'expired' else ${enrollments.status}::text end)`;
+
+/** Tickets of a ticket type that `buyerId`'s active enrollments hold, which `max_per_user` limits. */
+export async function ticketsOwned(tx: Tx, ticketTypeId: string, buyerId: string) {
+  const [row] = await tx
+    .select({ total: sql<number>`coalesce(sum(${enrollments.quantity}), 0)`.mapWith(Number) })
+    .from(enrollments)
+    .where(and(eq(enrollments.ticketTypeId, ticketTypeId), eq(enrollments.buyerId, buyerId), activeEnrollment()));
+  return row?.total ?? 0;
+}
 
 /** Enrollments with their event, ticket type, buyer, tickets and refunds, in the order of `ids`. */
 export async function loadEnrollments(ids: string[]): Promise<EnrollmentModel.Enrollment[]> {

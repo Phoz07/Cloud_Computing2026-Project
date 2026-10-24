@@ -4,6 +4,7 @@ import {
 } from "@app/db";
 import { deleteFile, fileUrl } from "@app/storage";
 import { can, canModerate } from "../../libs/access";
+import { cacheEvent, forgetDeletedEvent, readCachedEvent, refreshCachedEvent } from "../../libs/event-cache";
 import {
   CategoryNotFound, EventHasEnrollments, EventNotFound, EventSuspended, InvalidRefund, InvalidSchedule, InvalidSlug,
   InviteOnly, isForeignKeyViolation, isUniqueViolation, SlugTaken, SuspendForbidden,
@@ -52,10 +53,10 @@ const toDetail = (event: EventRow, category: CategoryRow): EventModel.EventDetai
 });
 
 const managesAll = (viewer: Viewer) => can(viewer.role, { event: ["manage-all"] });
-const isScheduled = (event: EventRow) => event.publishAt !== null && event.publishAt > new Date();
+const isScheduled = (event: EventModel.EventDetail) => event.publishAt !== null && new Date(event.publishAt) > new Date();
 
-/** Public ones once published; the rest only its owner and admins (invitees are checked in getEvent). */
-const isVisibleTo = (event: EventRow, viewer: Viewer | null) =>
+/** Public ones once published; the rest only its owner and admins (invitees are checked in findVisibleEvent). */
+const isVisibleTo = (event: EventModel.EventDetail, viewer: Viewer | null) =>
   (event.status === "public" && !isScheduled(event)) ||
   (!!viewer && (viewer.id === event.organizerId || managesAll(viewer)));
 
@@ -75,6 +76,26 @@ const searchFilter = (q: string | undefined) => {
 async function getEventById(id: string) {
   const [row] = await withCategory().where(eq(events.id, id));
   return row ? toDetail(row.event, row.category) : new EventNotFound();
+}
+
+/** Re-reads the event after a write and replaces its cached copy, so readers see the change at once. */
+export async function refreshEvent(eventId: string, previousSlug?: string) {
+  const event = await getEventById(eventId);
+  if (!(event instanceof Error)) await refreshCachedEvent(event, previousSlug);
+  return event;
+}
+
+/** The event by uuid or slug: from Redis, or else from the database (and then cached). Null if there's none. */
+async function loadEvent(idOrSlug: string) {
+  const byId = UUID.test(idOrSlug);
+  const cached = await readCachedEvent(idOrSlug, byId);
+  if (cached === "gone") return null;
+  if (cached) return cached;
+  const [row] = await withCategory().where(eq(byId ? events.id : events.slug, idOrSlug));
+  if (!row) return null;
+  const event = toDetail(row.event, row.category);
+  await cacheEvent(event);
+  return event;
 }
 
 export async function listPublic(query: EventModel.Get["Query"]) {
@@ -129,13 +150,13 @@ export async function isSlugAvailable(slug: string, excludeId?: string) {
   return { available: !row };
 }
 
-/** The event (by uuid or slug) with its category, if `viewer` may open it; what to answer otherwise. */
+/** The event (by uuid or slug), if `viewer` may open it; what to answer otherwise. */
 export async function findVisibleEvent(idOrSlug: string, viewer: (Viewer & { email: string }) | null) {
-  const [row] = await withCategory().where(eq(UUID.test(idOrSlug) ? events.id : events.slug, idOrSlug));
-  if (!row) return new EventNotFound();
-  if (isVisibleTo(row.event, viewer)) return row;
-  if (row.event.status === "invite") {
-    if (viewer && (await isInvited(row.event.id, viewer.email))) return row;
+  const event = await loadEvent(idOrSlug);
+  if (!event) return new EventNotFound();
+  if (isVisibleTo(event, viewer)) return event;
+  if (event.status === "invite") {
+    if (viewer && (await isInvited(event.id, viewer.email))) return event;
     // says it's invite-only (and nothing else), so an invitee knows to sign in with the invited email
     return new InviteOnly();
   }
@@ -143,10 +164,8 @@ export async function findVisibleEvent(idOrSlug: string, viewer: (Viewer & { ema
   return new EventNotFound();
 }
 
-export async function getEvent(idOrSlug: string, viewer: (Viewer & { email: string }) | null) {
-  const row = await findVisibleEvent(idOrSlug, viewer);
-  return row instanceof Error ? row : toDetail(row.event, row.category);
-}
+export const getEvent = (idOrSlug: string, viewer: (Viewer & { email: string }) | null) =>
+  findVisibleEvent(idOrSlug, viewer);
 
 export async function createEvent(owner: Viewer, input: EventModel.Post["Body"]) {
   const startsAt = new Date(input.startsAt);
@@ -172,7 +191,8 @@ export async function createEvent(owner: Viewer, input: EventModel.Post["Body"])
           endsAt,
         })
         .returning({ id: events.id });
-      return getEventById(event!.id);
+      // also points the slug at it, in case a deleted event's slug was still cached
+      return refreshEvent(event!.id);
     } catch (error) {
       if (isForeignKeyViolation(error)) return new CategoryNotFound();
       if (!isUniqueViolation(error)) throw error;
@@ -195,6 +215,7 @@ export async function updateEvent(eventId: string, actor: Viewer, input: EventMo
       ? input.description
       : sanitizeDescription(input.description, eventId) || null;
 
+  let previousSlug: string;
   try {
     const result = await db.transaction(async (tx) => {
       const [current] = await tx.select().from(events).where(eq(events.id, eventId)).for("update");
@@ -231,9 +252,10 @@ export async function updateEvent(eventId: string, actor: Viewer, input: EventMo
           refundPercent: isRefundAvailable ? refundPercent : null,
         })
         .where(eq(events.id, eventId));
-      return null;
+      return { previousSlug: current.slug };
     });
-    if (result) return result;
+    if (result instanceof Error) return result;
+    previousSlug = result.previousSlug;
   } catch (error) {
     if (isUniqueViolation(error)) return new SlugTaken();
     if (isForeignKeyViolation(error)) return new CategoryNotFound();
@@ -242,7 +264,7 @@ export async function updateEvent(eventId: string, actor: Viewer, input: EventMo
   // invitations added before the switch are emailed now; not awaited, since there may be up to a
   // thousand and the save is already done (it never throws, and claims each row so none goes twice)
   if (input.status === "invite") void sendPendingInvitations(eventId);
-  return getEventById(eventId);
+  return refreshEvent(eventId, previousSlug);
 }
 
 /**
@@ -253,11 +275,11 @@ export async function updateEvent(eventId: string, actor: Viewer, input: EventMo
  */
 export async function deleteEvent(eventId: string, actor: Viewer) {
   const moderator = canModerate(actor.role);
-  let keys;
+  let deleted;
   try {
-    keys = await db.transaction(async (tx) => {
+    deleted = await db.transaction(async (tx) => {
       const [current] = await tx
-        .select({ status: events.status, coverImageKey: events.coverImageKey })
+        .select({ slug: events.slug, status: events.status, coverImageKey: events.coverImageKey })
         .from(events)
         .where(eq(events.id, eventId))
         .for("update");
@@ -266,14 +288,15 @@ export async function deleteEvent(eventId: string, actor: Viewer) {
 
       const assets = await tx.select({ key: eventAssets.key }).from(eventAssets).where(eq(eventAssets.eventId, eventId));
       await tx.delete(events).where(eq(events.id, eventId));
-      return [current.coverImageKey, ...assets.map((asset) => asset.key)];
+      return { slug: current.slug, keys: [current.coverImageKey, ...assets.map((asset) => asset.key)] };
     });
   } catch (error) {
     if (isForeignKeyViolation(error)) return new EventHasEnrollments();
     throw error;
   }
-  if (keys instanceof Error) return keys;
+  if (deleted instanceof Error) return deleted;
+  await forgetDeletedEvent(eventId, deleted.slug);
   // best effort, after the commit: a failure leaves an orphaned object, not a failed request
-  await Promise.all(keys.map((key) => deleteFile(key)));
+  await Promise.all(deleted.keys.map((key) => deleteFile(key)));
   return { id: eventId };
 }

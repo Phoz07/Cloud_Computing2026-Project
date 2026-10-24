@@ -194,6 +194,8 @@ bash scripts/check-lab.sh   # หลัง Start Lab ทุกครั้ง
 make up           # terraform apply ทั้งหมด (ECR/S3/SQS/DNS + EKS + RDS + NLB + ingress-nginx) — root เดียว state เดียว
 make deploy       # build 7 images → ECR, สร้าง k8s Secrets, helm upgrade (migrate ก่อน), roll out
 make admin EMAIL=you@example.com   # ตั้ง admin คนแรก หลังสมัครผ่านหน้าเว็บ
+make secrets      # คัดลอก Google/Gmail/Stripe จาก .env ไปเป็น Secrets Manager (รันซ้ำหลังเติม Stripe)
+make ci-creds DEPLOY=1   # เก็บ credential ของ session นี้เป็น GitHub secrets → push เข้า main แล้ว deploy ขึ้น AWS อัตโนมัติ
 make down         # terraform apply -var platform=false (ลบ EKS/RDS/NLB, เก็บ ECR/S3/SQS/DNS) — ทำทุกครั้งก่อนจบ session
 ```
 

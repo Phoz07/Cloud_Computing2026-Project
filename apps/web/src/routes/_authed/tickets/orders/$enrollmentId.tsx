@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowLeft, CalendarClock, ChevronRight, CircleCheckBig, CircleX, Clock, CreditCard, Hourglass, Mail, MapPin, QrCode,
-  ReceiptText, TicketX, Undo2, UserRound,
+  ReceiptText, RefreshCw, TicketX, Undo2, UserRound,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { z } from "zod";
@@ -138,7 +138,13 @@ function OrderStatus({ order, confirming, afterPayment }: { order: Enrollment; c
           description: afterPayment
             ? "หากชำระแล้ว ระบบจะส่งตั๋วทางอีเมลเมื่อยืนยันเสร็จ ไม่ต้องชำระซ้ำ"
             : `ชำระภายใน ${order.expiresAt ? formatDateTime(order.expiresAt) : "เวลาที่กำหนด"} เพื่อรับตั๋ว`,
-          actions: <PayButton enrollmentId={order.id} />,
+          // back from Stripe, checking comes first: paying again isn't what they need
+          actions: (
+            <div className="flex flex-wrap justify-center gap-2">
+              <PayButton enrollmentId={order.id} variant={afterPayment ? "outline" : "default"} />
+              <VerifyPaymentButton enrollmentId={order.id} variant={afterPayment ? "default" : "outline"} />
+            </div>
+          ),
         };
       case "rejected":
         return {
@@ -171,6 +177,34 @@ function OrderStatus({ order, confirming, afterPayment }: { order: Enrollment; c
   );
 }
 
+/** Has the payment service ask Stripe, for a payment the webhook hasn't confirmed (e.g. it never arrived). */
+function VerifyPaymentButton({ enrollmentId, ...props }: { enrollmentId: string } & React.ComponentProps<typeof Button>) {
+  const queryClient = useQueryClient();
+  const verify = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await paymentClient.api.payment.checkout.verify.post({ enrollmentId });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: ({ status }) => {
+      if (status === "confirmed") {
+        toast.add({ type: "success", title: "ยืนยันการชำระเงินแล้ว", description: "ส่งตั๋วไปที่อีเมลของผู้เข้าร่วมแล้ว" });
+      } else if (status === "awaiting_payment") {
+        toast.add({ type: "info", title: "ยังไม่พบการชำระเงิน", description: "หากเพิ่งชำระ รอสักครู่แล้วตรวจสอบอีกครั้ง" });
+      }
+      // anything else (e.g. the hold ran out) shows on the page itself
+    },
+    onError: (error) => toast.add({ type: "error", title: problemMessage(error) }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: enrollmentsKey }),
+  });
+  return (
+    <Button {...props} disabled={verify.isPending || props.disabled} onClick={() => verify.mutate()}>
+      {verify.isPending ? <Spinner data-icon="inline-start" /> : <RefreshCw data-icon="inline-start" />}
+      ตรวจสอบการชำระเงิน
+    </Button>
+  );
+}
+
 /** What happened to a cancelled order's money, by the state of the refund that cancelled it. */
 function cancelledStatus(order: Enrollment) {
   const refund = order.refunds.at(-1);
@@ -185,7 +219,10 @@ function cancelledStatus(order: Enrollment) {
         description: `${refund.status === "succeeded" ? "คืนเงิน" : "กำลังคืนเงิน"} ${amount} เงินจะกลับเข้าช่องทางที่คุณชำระภายใน 5–10 วันทำการ`,
       };
     case "requires_action":
-      return { title, description: `Stripe ส่งอีเมลขอเลขบัญชีธนาคารที่คุณใช้ชำระ กรุณาตอบกลับเพื่อรับเงินคืน ${amount}` };
+      return {
+        title,
+        description: `ช่องทางที่คุณชำระคืนเงินอัตโนมัติไม่ได้ เราส่งอีเมลวิธีรับเงินคืน ${amount} ไปแล้ว กรุณาติดต่อเราพร้อมเลขคำสั่งซื้อ ${order.id}`,
+      };
     case "failed":
     case "canceled":
       return { title, description: `คืนเงิน ${amount} ไม่สำเร็จ กรุณาติดต่อผู้จัดงานเพื่อรับเงินคืนทางช่องทางอื่น` };
@@ -211,7 +248,7 @@ function OrderSummary({ order }: { order: Enrollment }) {
           </span>
         </CardDescription>
         <CardAction>
-          <EnrollmentStatusBadge enrollment={order} />
+          <EnrollmentStatusBadge enrollment={order} className="items-end" />
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 text-sm">

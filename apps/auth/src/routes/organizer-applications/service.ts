@@ -1,5 +1,5 @@
 import { and, db, desc, eq, organizerApplications, users } from "@app/db";
-import { enqueueMail } from "@app/mail";
+import { enqueueMail, type MailContent } from "@app/mail";
 import { HTTPError } from "elysia";
 import { revokeCachedSessions } from "../../libs/auth";
 import type * as OrganizerApplicationModel from "./model";
@@ -111,8 +111,8 @@ export async function approveApplication(id: string, reviewerId: string) {
 
   await revokeCachedSessions(approved.userId);
   notifyApplicant(approved, (name) => ({
-    subject: "คำขอเป็นผู้จัดงานได้รับการอนุมัติแล้ว",
-    html: `<p>สวัสดีคุณ ${name}</p><p>คำขอเป็นผู้จัดงานในนาม <strong>${Bun.escapeHTML(approved.organizationName)}</strong> ได้รับการอนุมัติแล้ว ตอนนี้คุณสร้างและจัดการอีเวนต์ได้จากแดชบอร์ด</p><p><a href="${appUrl}/dashboard">ไปที่แดชบอร์ด</a></p>`,
+    template: "organizer-approved",
+    props: { name, organizationName: approved.organizationName, url: `${appUrl}/dashboard` },
   }));
   return toApplication(approved);
 }
@@ -131,10 +131,13 @@ export async function rejectApplication(id: string, reviewerId: string, note?: s
   if (!rejected) return reviewFailure(id);
 
   notifyApplicant(rejected, (name) => ({
-    subject: "ผลการพิจารณาคำขอเป็นผู้จัดงาน",
-    html: `<p>สวัสดีคุณ ${name}</p><p>คำขอเป็นผู้จัดงานในนาม <strong>${Bun.escapeHTML(rejected.organizationName)}</strong> ยังไม่ได้รับการอนุมัติ</p>${
-      rejected.reviewNote ? `<p>หมายเหตุจากผู้ดูแล: ${Bun.escapeHTML(rejected.reviewNote)}</p>` : ""
-    }<p>คุณแก้ไขข้อมูลและยื่นคำขอใหม่ได้จาก<a href="${appUrl}/profile/organizer">หน้าโปรไฟล์</a></p>`,
+    template: "organizer-rejected",
+    props: {
+      name,
+      organizationName: rejected.organizationName,
+      note: rejected.reviewNote,
+      url: `${appUrl}/profile/organizer`,
+    },
   }));
   return toApplication(rejected);
 }
@@ -150,10 +153,10 @@ async function reviewFailure(id: string) {
 const appUrl = process.env.BETTER_AUTH_URL ?? "http://localhost:5173";
 
 // Not awaited: the review is already saved, and the queue retries delivery on its own.
-function notifyApplicant(row: Row, compose: (name: string) => { subject: string; html: string }) {
+function notifyApplicant(row: Row, compose: (name: string) => MailContent) {
   db.select({ email: users.email, name: users.name })
     .from(users)
     .where(eq(users.id, row.userId))
-    .then(([user]) => user && enqueueMail({ to: user.email, ...compose(Bun.escapeHTML(user.name)) }))
+    .then(([user]) => user && enqueueMail({ to: user.email, ...compose(user.name) }))
     .catch((error) => console.error("Failed to enqueue organizer application mail", error));
 }

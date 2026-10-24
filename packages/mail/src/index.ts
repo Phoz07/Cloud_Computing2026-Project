@@ -1,11 +1,14 @@
 import { SendMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
+import type { MailTemplate, MailTemplates } from "./templates";
 
-export type MailMessage = {
-  to: string;
-  subject: string;
-  html?: string;
-  text?: string;
-};
+export type * from "./templates";
+
+/** What a mail says: one of the templates in apps/mail-worker/emails, with its props. */
+export type MailContent = {
+  [K in MailTemplate]: { template: K; props: MailTemplates[K] };
+}[MailTemplate];
+
+export type MailMessage = { to: string } & MailContent;
 
 export const sqs = new SQSClient({
   region: process.env.AWS_REGION,
@@ -20,11 +23,12 @@ export async function enqueueMail(message: MailMessage) {
   );
 }
 
+/** The message's shape only: whether `template` exists is up to the worker that renders it. */
 export function parseMailMessage(body: string | undefined): MailMessage | null {
   try {
     const value = JSON.parse(body ?? "");
-    if (typeof value?.to !== "string" || typeof value?.subject !== "string") return null;
-    if (typeof value.html !== "string" && typeof value.text !== "string") return null;
+    if (typeof value?.to !== "string" || typeof value?.template !== "string") return null;
+    if (typeof value.props !== "object" || value.props === null) return null;
     return value;
   } catch {
     return null;

@@ -1,16 +1,16 @@
 import {
-  and, asc, count, db, desc, enrollments, eq, eventInvitations, events, ilike, or, sql, ticketTypeQuestions, tickets,
-  ticketTypes, users, type TicketAnswer,
+  and, asc, count, db, desc, enrollments, eq, eventInvitations, events, ilike, or, seatHolds, sql, ticketTypeQuestions,
+  tickets, ticketTypes, users, type TicketAnswer,
 } from "@app/db";
-import { enqueueMail } from "@app/mail";
+import { enqueueMail, type MailContent, type MailOrder } from "@app/mail";
 import {
-  accountLink, activeEnrollment, EnrollmentNotFound, formatMailTime, invitationTaken, markConfirmed, seatsTaken,
+  accountLink, announceSeats, EnrollmentNotFound, invitationTaken, markConfirmed, seatsTaken,
   sendTicketMails, SoldOut, ticketCode,
 } from "@app/tickets";
-import { eventAccess, findInvitation, manages, type Viewer } from "../../libs/access";
-import { effectiveStatusSql, loadEnrollments } from "../../libs/enrollments";
+import { enrollableEvent, manages, type Viewer } from "../../libs/access";
+import { effectiveStatusSql, loadEnrollments, ticketsOwned } from "../../libs/enrollments";
 import {
-  EnrollmentNotOpen, EnrollmentNotPending, InvalidAnswers, InvitationUsed, LimitReached, NotInvited, TicketTypeNotFound,
+  EnrollmentNotPending, InvalidAnswers, InvitationUsed, LimitReached, NotInvited, TicketTypeNotFound,
 } from "../../libs/errors";
 import type * as EnrollmentModel from "./model";
 
@@ -59,22 +59,15 @@ function toTickets(attendees: EnrollmentModel.AttendeeInput[], questions: Questi
 /**
  * Enrolls `buyer` in a ticket type, one ticket per attendee. Everything that limits it (the event
  * being open, the buyer's limit, the seats, the invitation) is checked under a lock on the ticket
- * type row, the same lock its quota edits and confirmations take, so concurrent enrollments can't
- * oversell. Free first_come and invite tickets are confirmed and mailed right away; paid ones wait
- * for payment (apps/payment), approval ones for the organizer.
+ * type row, the same lock its quota edits, seat holds and confirmations take, so concurrent
+ * enrollments can't oversell. The buyer's seat hold (routes/holds) makes room for its seats and
+ * ends here. Free first_come and invite tickets are confirmed and mailed right away; paid ones
+ * wait for payment (apps/payment), approval ones for the organizer.
  */
 export async function enroll(buyer: Viewer, input: EnrollmentModel.Post["Body"]) {
-  const [found] = await db
-    .select({ event: events })
-    .from(ticketTypes)
-    .innerJoin(events, eq(events.id, ticketTypes.eventId))
-    .where(eq(ticketTypes.id, input.ticketTypeId));
-  if (!found) return new TicketTypeNotFound();
-  const { event } = found;
-  const invitation = await findInvitation(event.id, buyer.email);
-  const access = eventAccess(event, buyer, !!invitation);
-  if (access instanceof Error) return access;
-  if (access !== "open") return new EnrollmentNotOpen();
+  const open = await enrollableEvent(input.ticketTypeId, buyer);
+  if (open instanceof Error) return open;
+  const { event, invitation } = open;
 
   const questions = await db
     .select()
@@ -89,12 +82,13 @@ export async function enroll(buyer: Viewer, input: EnrollmentModel.Post["Body"])
     const [ticketType] = await tx.select().from(ticketTypes).where(eq(ticketTypes.id, input.ticketTypeId)).for("update");
     if (!ticketType) return new TicketTypeNotFound();
 
-    const [mine] = await tx
-      .select({ total: sql<number>`coalesce(sum(${enrollments.quantity}), 0)`.mapWith(Number) })
-      .from(enrollments)
-      .where(and(eq(enrollments.ticketTypeId, ticketType.id), eq(enrollments.buyerId, buyer.id), activeEnrollment()));
-    if ((mine?.total ?? 0) + quantity > ticketType.maxPerUser) return new LimitReached();
-    if (ticketType.quota !== null && (await seatsTaken(tx, ticketType.id)) + quantity > ticketType.quota) {
+    if ((await ticketsOwned(tx, ticketType.id, buyer.id)) + quantity > ticketType.maxPerUser) return new LimitReached();
+    // the buyer's own hold makes room for its seats; a lapsed one counts for nothing, so the buyer
+    // then gets whatever seats are still free
+    if (
+      ticketType.quota !== null &&
+      (await seatsTaken(tx, ticketType.id, { holderId: buyer.id })) + quantity > ticketType.quota
+    ) {
       return new SoldOut();
     }
 
@@ -134,10 +128,13 @@ export async function enroll(buyer: Viewer, input: EnrollmentModel.Post["Body"])
     await tx.insert(tickets).values(
       attendees.map((attendee) => ({ ...attendee, id: Bun.randomUUIDv7(), enrollmentId: enrollment!.id, code: ticketCode() })),
     );
+    // the enrollment now holds the seats (awaiting_payment for PAYMENT_HOLD_MS)
+    await tx.delete(seatHolds).where(and(eq(seatHolds.ticketTypeId, ticketType.id), eq(seatHolds.holderId, buyer.id)));
     if (status === "confirmed") await markConfirmed(tx, enrollment!);
     return { id: enrollment!.id, confirmed: status === "confirmed" };
   });
   if (created instanceof Error) return created;
+  announceSeats(event.id);
   // awaited (at most 10 mails); it never throws
   if (created.confirmed) await sendTicketMails(created.id);
   return getEnrollmentById(created.id);
@@ -201,39 +198,45 @@ export async function listEventEnrollments(
   return { items: await loadEnrollments(rows.map((row) => row.id)), total, counts };
 }
 
-type MailOrder = { buyerEmail: string | null; buyerName: string | null; title: string; startsAt: Date; ticketType: string };
+type Buyer = { email: string | null; name: string | null };
 
-async function mailOrder(enrollmentId: string): Promise<MailOrder | undefined> {
+async function mailOrder(enrollmentId: string): Promise<{ buyer: Buyer; order: MailOrder } | undefined> {
   const [row] = await db
     .select({
       buyerEmail: users.email,
       buyerName: users.name,
       title: events.title,
+      venue: events.venue,
       startsAt: events.startsAt,
       ticketType: ticketTypes.name,
+      quantity: enrollments.quantity,
     })
     .from(enrollments)
     .innerJoin(events, eq(events.id, enrollments.eventId))
     .innerJoin(ticketTypes, eq(ticketTypes.id, enrollments.ticketTypeId))
     .leftJoin(users, eq(users.id, enrollments.buyerId))
     .where(eq(enrollments.id, enrollmentId));
-  return row;
+  if (!row) return undefined;
+  return {
+    buyer: { email: row.buyerEmail, name: row.buyerName },
+    order: {
+      event: { title: row.title, venue: row.venue, startsAt: row.startsAt.toISOString() },
+      ticketType: row.ticketType,
+      quantity: row.quantity,
+    },
+  };
 }
 
 /** Mails the buyer about the organizer's decision. Never throws: the decision is already saved. */
-async function mailDecision(enrollmentId: string, body: (order: MailOrder) => { subject: string; html: string }) {
+async function mailDecision(enrollmentId: string, compose: (buyer: Buyer, order: MailOrder) => MailContent) {
   try {
-    const order = await mailOrder(enrollmentId);
-    if (!order?.buyerEmail) return;
-    await enqueueMail({ to: order.buyerEmail, ...body(order) });
+    const found = await mailOrder(enrollmentId);
+    if (!found?.buyer.email) return;
+    await enqueueMail({ to: found.buyer.email, ...compose(found.buyer, found.order) });
   } catch (error) {
     console.error("Failed to enqueue enrollment mail", error);
   }
 }
-
-const greeting = (order: MailOrder) => `<p>สวัสดีคุณ ${Bun.escapeHTML(order.buyerName ?? "")}</p>`;
-const orderLine = (order: MailOrder) =>
-  `ตั๋ว <strong>${Bun.escapeHTML(order.ticketType)}</strong> ของอีเวนต์ <strong>${Bun.escapeHTML(order.title)}</strong> (${formatMailTime(order.startsAt)})`;
 
 /**
  * Approves a pending enrollment. A free one is confirmed and its tickets mailed; a paid one waits
@@ -251,19 +254,21 @@ export async function approveEnrollment(enrollmentId: string, reviewerId: string
       .set({ reviewedBy: reviewerId, reviewedAt: new Date(), ...(paid ? { status: "awaiting_payment", expiresAt } : {}) })
       .where(eq(enrollments.id, enrollmentId));
     if (!paid) await markConfirmed(tx, current);
-    return { paid, expiresAt };
+    return { paid, expiresAt, eventId: current.eventId };
   });
   if (result instanceof Error) return result;
+  announceSeats(result.eventId);
 
   if (!result.paid) await sendTicketMails(enrollmentId);
   else {
-    await mailDecision(enrollmentId, (order) => ({
-      subject: `คำขอของคุณได้รับการอนุมัติ: ${order.title}`,
-      html:
-        greeting(order) +
-        `<p>ผู้จัดงานอนุมัติคำขอ${orderLine(order)}แล้ว</p>` +
-        `<p>กรุณาชำระเงินภายใน ${formatMailTime(result.expiresAt)} เพื่อรับตั๋ว</p>` +
-        `<p><a href="${accountLink(`/tickets/orders/${enrollmentId}`, true)}">ชำระเงิน</a></p>`,
+    await mailDecision(enrollmentId, (buyer, order) => ({
+      template: "enrollment-approved",
+      props: {
+        name: buyer.name,
+        order,
+        payBy: result.expiresAt.toISOString(),
+        url: accountLink(`/tickets/orders/${enrollmentId}`, true),
+      },
     }));
   }
   return getEnrollmentById(enrollmentId);
@@ -274,16 +279,14 @@ export async function rejectEnrollment(enrollmentId: string, reviewerId: string,
     .update(enrollments)
     .set({ status: "rejected", reviewedBy: reviewerId, reviewedAt: new Date() })
     .where(and(eq(enrollments.id, enrollmentId), eq(enrollments.status, "pending")))
-    .returning({ id: enrollments.id });
+    .returning({ eventId: enrollments.eventId });
   if (!rejected) return new EnrollmentNotPending();
+  announceSeats(rejected.eventId);
 
-  const reason = note?.trim();
-  await mailDecision(enrollmentId, (order) => ({
-    subject: `คำขอของคุณไม่ได้รับการอนุมัติ: ${order.title}`,
-    html:
-      greeting(order) +
-      `<p>ขออภัย ผู้จัดงานไม่ได้อนุมัติคำขอ${orderLine(order)}</p>` +
-      (reason ? `<p>เหตุผลจากผู้จัดงาน: ${Bun.escapeHTML(reason)}</p>` : ""),
+  const reason = note?.trim() || null;
+  await mailDecision(enrollmentId, (buyer, order) => ({
+    template: "enrollment-rejected",
+    props: { name: buyer.name, order, reason },
   }));
   return getEnrollmentById(enrollmentId);
 }

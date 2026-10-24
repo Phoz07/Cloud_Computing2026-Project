@@ -833,6 +833,8 @@ makes demo day boring.
 
 ## 9. Deployment and CI/CD
 
+> **Superseded in part 2026-10-24:** CI now also deploys — the `deploy` job in `.github/workflows/ci.yml` runs `scripts/deploy.sh` on push to `main` using the Learner Lab session credentials stored as GitHub secrets (`make ci-creds`; there is still no OIDC). It skips when the credentials are expired or the platform is down. See CLAUDE.md "CI/CD".
+
 **GitHub Actions cannot deploy to this account.** OIDC federation requires an IAM identity
 provider that cannot be created here, and static lab credentials expire every four hours.
 

@@ -82,13 +82,17 @@ mksecret eventide-common \
   --from-literal=MAIL_QUEUE_URL="$MAIL_QUEUE_URL"
 
 AUTH_ARGS=(--from-literal=BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET:-$(jkey "$RDS_JSON" BETTER_AUTH_SECRET)}")
+# Google rejects redirect URIs that are not HTTPS (localhost aside), so the button
+# would only ever fail on the bare http://<nlb> origin: enable it once the custom
+# domain serves HTTPS.
+case "$PUBLIC_URL" in https://*) ;; *) GOOGLE_SECRET="" ;; esac
 if [ -n "$GOOGLE_SECRET" ]; then
   G="$(sm "$GOOGLE_SECRET")"
   AUTH_ARGS+=(--from-literal=GOOGLE_CLIENT_ID="$(jkey "$G" GOOGLE_CLIENT_ID)")
   AUTH_ARGS+=(--from-literal=GOOGLE_CLIENT_SECRET="$(jkey "$G" GOOGLE_CLIENT_SECRET)")
 fi
 mksecret eventide-auth "${AUTH_ARGS[@]}"
-echo "google oauth: $([ -n "$GOOGLE_SECRET" ] && echo enabled || echo 'off (no eventide/google-oauth secret)')"
+echo "google oauth: $([ -n "$GOOGLE_SECRET" ] && echo enabled || echo 'off (needs the eventide/google-oauth secret AND an https:// PUBLIC_URL)')"
 
 S='{}'; [ -n "$STRIPE_SECRET" ] && S="$(sm "$STRIPE_SECRET")"
 mksecret eventide-payment \

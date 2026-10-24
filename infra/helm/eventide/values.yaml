@@ -22,6 +22,10 @@ ingress:
   # Uploads go through the services as multipart (packages/storage): avatar 2 MiB,
   # event cover 5 MiB, event asset 10 MiB. ingress-nginx's default is 1m.
   proxyBodySize: 20m
+  # The event page's live seats are a WebSocket (/api/regis/events/:id/availability/
+  # live). ingress-nginx upgrades it by itself but closes idle connections after 60 s.
+  # (The NLB's own idle timeout is 350 s; the client reconnects past that.)
+  proxyTimeoutSeconds: 3600
 
 # One Secret every app pod gets (scripts/deploy.sh on EKS, scripts/k3d-up.sh on
 # k3d create it): DATABASE_URL, S3_BUCKET, S3_REGION, AWS_REGION, AWS_ACCESS_KEY_ID,
@@ -95,12 +99,19 @@ services:
     image: { repository: eventide/auth, tag: latest }
     secretName: eventide-auth            # BETTER_AUTH_SECRET, GOOGLE_CLIENT_ID/SECRET
 
+  # Runs from a bundled file on oven/bun:1-slim (uid 1000): the OG image renderer
+  # (takumi-js) is a native addon with a font read from node_modules. Rendering a
+  # 1200x630 JPEG needs headroom, hence the larger memory limit.
   event:
     port: 3000
+    runAsUser: 1000
     ingressPaths: [/api/events]
     livePath: /api/events/health
     readyPath: /api/events/health
     image: { repository: eventide/event, tag: latest }
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
     hpa:
       enabled: false
       minReplicas: 2
@@ -123,14 +134,16 @@ services:
     image: { repository: eventide/payment, tag: latest }
     secretName: eventide-payment         # STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET ("" = payment off)
 
-  # SQS consumer, no HTTP: Deployment only (no Service, Ingress or probes).
+  # SQS consumer, no HTTP: Deployment only (no Service, Ingress or probes). Bundled
+  # file on oven/bun:1-slim (uid 1000): the templates attach emails/static/logo.png.
   mail-worker:
     replicas: 1
+    runAsUser: 1000
     image: { repository: eventide/mail-worker, tag: latest }
     secretName: eventide-mail-worker     # GMAIL_USER, GMAIL_APP_PASSWORD, MAIL_FROM ("" = dry-run)
     resources:
-      requests: { cpu: 10m, memory: 48Mi }
-      limits: { cpu: 100m, memory: 128Mi }
+      requests: { cpu: 10m, memory: 64Mi }
+      limits: { cpu: 200m, memory: 192Mi }
 
   # 60 s session cache + revoked markers for @app/auth-guard. No persistence on
   # purpose: losing it means one slow request (fall through to auth), never a wrong one.
@@ -149,19 +162,23 @@ services:
       requests: { cpu: 10m, memory: 32Mi }
       limits: { cpu: 100m, memory: 96Mi }
 
-  # Static React SPA on nginx-unprivileged (uid 101, :8080). Catches every path
-  # the API rules don't — one origin, no CORS, no CloudFront (denied in the lab).
+  # The SPA's Bun server (apps/web/server): serves dist/ and injects per-URL <head>
+  # tags (title, Open Graph) so link previews see the event. Catches every path the
+  # API rules don't — one origin, no CORS, no CloudFront (denied in the lab). It
+  # needs the public origin and the in-cluster event Service for those tags.
   web:
-    port: 8080
+    port: 3000
     servicePort: 80
     replicas: 1
-    runAsUser: 101
-    readOnlyRootFs: false # nginx writes /var/cache/nginx, /var/run
+    runAsUser: 1000
     noCommonEnv: true
     ingressPaths: ["/"]
     image: { repository: eventide/web, tag: latest }
+    env:
+      BETTER_AUTH_URL: "{{ .Values.publicUrl }}"
+      EVENT_SERVICE_URL: "http://event.{{ .Values.namespace }}.svc.cluster.local"
     livePath: /
     readyPath: /
     resources:
-      requests: { cpu: 10m, memory: 24Mi }
-      limits: { cpu: 100m, memory: 64Mi }
+      requests: { cpu: 10m, memory: 48Mi }
+      limits: { cpu: 200m, memory: 128Mi }

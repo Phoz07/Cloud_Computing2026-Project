@@ -70,7 +70,8 @@ it (single DB, Redis pod, SQS mail worker, `/files` → S3, 4 k8s Secrets). Spec
 - [x] **`GATE`** — `make k3d`: four `/api/*/health` → `โอเค`, cookie login through the
       ingress, avatar upload → `/files/public/…` 200, `/files/private/…` 403, mail-worker
       dry-run log, `make admin` promotes.
-- [ ] Docs synced (this file, CLAUDE/AGENTS, README, KB supersede rows, SYSTEM-DESIGN §1.1); PR merged.
+- [x] Docs synced; PR #6 merged.
+- [x] 2026-10-24: `suwizx/v2` final (seat holds + live seats, OG images, Stripe verify, React Email) merged; web is now a Bun server, event/mail-worker bundled; CI/CD deploy job added (branch `feat/final-v2-cicd`).
 - [x] Terraform collapsed to ONE root (`infra/terraform/`, `modules/platform` behind
       `var.platform`); credentials in `infra/aws.env` only (2026-10-24, Vnntnn's request).
 - [ ] **Lab session** — paste creds into `infra/aws.env` → `bash scripts/check-lab.sh` (read

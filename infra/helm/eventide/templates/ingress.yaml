@@ -9,6 +9,9 @@ metadata:
     # Multipart uploads go through the services (packages/storage); the default 1m
     # would 413 every cover image.
     nginx.ingress.kubernetes.io/proxy-body-size: {{ .Values.ingress.proxyBodySize | quote }}
+    # Live-seats WebSocket: keep idle connections open (see values.yaml).
+    nginx.ingress.kubernetes.io/proxy-read-timeout: {{ .Values.ingress.proxyTimeoutSeconds | quote }}
+    nginx.ingress.kubernetes.io/proxy-send-timeout: {{ .Values.ingress.proxyTimeoutSeconds | quote }}
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   rules:

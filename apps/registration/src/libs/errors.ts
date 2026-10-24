@@ -45,3 +45,12 @@ export class InvalidAnswers extends HTTPError.id("INVALID_ANSWERS", 422) {
 export class EnrollmentNotPending extends HTTPError.id("ENROLLMENT_NOT_PENDING", 409) {
   override readonly detail = "รายการนี้ไม่ได้รอการอนุมัติแล้ว";
 }
+
+/** Only a ticket type with a quota (first_come) has seats to hold; the others enroll without a hold. */
+export class NothingToHold extends HTTPError.id("NOTHING_TO_HOLD", 409) {
+  override readonly detail = "ตั๋วประเภทนี้ไม่ต้องจองที่นั่งก่อนลงทะเบียน";
+}
+
+export class HoldExpired extends HTTPError.id("HOLD_EXPIRED", 409) {
+  override readonly detail = "หมดเวลาจองที่นั่งแล้ว กรุณาจองใหม่";
+}

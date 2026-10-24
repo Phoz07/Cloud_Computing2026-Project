@@ -2,9 +2,13 @@
 # Build context is the REPO ROOT:
 #   docker build -f apps/web/Dockerfile -t eventide/web .
 #
-# Static SPA served by nginx from inside the cluster, behind the same
-# ingress-nginx as the API — one origin, no CORS, no mixed content, and no
-# CloudFront (denied in the lab — docs/lab-probe-2026-09-07.txt).
+# The SPA is built with vite, then served by apps/web/server/index.ts (Bun): it
+# serves dist/ and injects per-URL <head> tags (title, Open Graph, Twitter) so
+# link previews see the event. It reads BETTER_AUTH_URL (public origin) and
+# EVENT_SERVICE_URL (in-cluster event Service). /api/* and /files/* never reach it —
+# the ingress routes those. Same origin, no CORS, no CloudFront (denied in the lab).
+# The server is bundled to /app/server/index.js so `../dist` (import.meta.dir)
+# resolves to /app/dist; no node_modules at runtime.
 
 FROM oven/bun:1 AS build
 WORKDIR /app
@@ -26,9 +30,13 @@ COPY apps ./apps
 # vite build only — `bun check` is CI's job; the service packages are devDependencies
 # for their exported types (Eden Treaty), erased at build time.
 RUN cd apps/web && bunx --bun vite build
+RUN cd apps/web && bun build server/index.ts --target bun --minify-whitespace --minify-syntax --outfile /out/server/index.js
 
-# nginx-unprivileged: runs as uid 101, listens on 8080 — fits a locked-down pod.
-FROM nginxinc/nginx-unprivileged:1.27-alpine
-COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/apps/web/dist /usr/share/nginx/html
-EXPOSE 8080
+FROM oven/bun:1-slim
+WORKDIR /app
+COPY --from=build /out/server/index.js ./server/index.js
+COPY --from=build /app/apps/web/dist ./dist
+ENV NODE_ENV=production
+USER 1000
+EXPOSE 3000
+CMD ["bun", "server/index.js"]

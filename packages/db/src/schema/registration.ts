@@ -58,6 +58,29 @@ export const enrollments = pgTable(
   ],
 );
 
+// Seats of a first_come ticket type an account holds while it fills in the enroll form, until
+// expires_at. One row per account and ticket type: a lapsed row is reused by the next hold, and
+// enrolling deletes it. Owned by apps/registration (see docs/tickets.md).
+export const seatHolds = pgTable(
+  "seat_holds",
+  {
+    id: id(),
+    // cascade: a hold is never worth keeping a ticket type, event or account around for
+    eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+    ticketTypeId: uuid("ticket_type_id").notNull().references(() => ticketTypes.id, { onDelete: "cascade" }),
+    holderId: uuid("holder_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    quantity: integer("quantity").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("seat_holds_ticket_type_id_holder_id_idx").on(table.ticketTypeId, table.holderId),
+    index("seat_holds_event_id_expires_at_idx").on(table.eventId, table.expiresAt),
+    index("seat_holds_holder_id_idx").on(table.holderId),
+    check("seat_holds_quantity_check", sql`${table.quantity} >= 1`),
+  ],
+);
+
 /** One answer to a ticket type's question, copied with its label when the ticket was made. */
 export type TicketAnswer = { questionId: string; label: string; value: string };
 
@@ -105,13 +128,14 @@ export const payments = pgTable(
   (table) => [index("payments_enrollment_id_idx").on(table.enrollmentId)],
 );
 
-// Stripe's refund statuses; requires_action: Stripe asked the buyer where to send the money (e.g. PromptPay)
+// Stripe's refund statuses; requires_action: waiting for the buyer to tell us where to send the
+// money (a refund made by hand, see refunds.stripe_refund_id)
 export const refundStatus = pgEnum("refund_status", ["pending", "requires_action", "succeeded", "failed", "canceled"]);
 
 // system: a payment that landed after its hold lapsed, or a second payment for one enrollment
 export const refundInitiator = pgEnum("refund_initiator", ["buyer", "organizer", "system"]);
 
-// A Stripe refund of a paid payment, at most one per payment. Owned by apps/payment.
+// A refund of a paid payment, at most one per payment. Owned by apps/payment.
 export const refunds = pgTable(
   "refunds",
   {
@@ -128,7 +152,9 @@ export const refunds = pgTable(
     requestedBy: uuid("requested_by").references(() => users.id, { onDelete: "set null" }),
     // the organizer's message to the buyer, or the system's reason (duplicate, unavailable)
     note: text("note"),
-    stripeRefundId: text("stripe_refund_id").notNull().unique(),
+    // null: made by hand, for a payment Stripe can't refund by itself (anything but a card, e.g.
+    // PromptPay); the buyer was mailed how to claim it
+    stripeRefundId: text("stripe_refund_id").unique(),
     failureReason: text("failure_reason"),
     ...timestamps,
   },

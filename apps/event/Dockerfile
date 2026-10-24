@@ -2,16 +2,14 @@
 # Build context is the REPO ROOT:
 #   docker build -f apps/event/Dockerfile --platform linux/amd64 -t eventide/event .
 #
-# Compiled to a single Bun binary on glibc distroless (SYSTEM-DESIGN §12.1):
-# 2-3x lower runtime memory than running the source. glibc build image ->
-# glibc distroless runtime (NOT alpine/musl).
+# A bundled `bun build --target bun` file on oven/bun:1-slim, NOT a `--compile`
+# binary: the OG image renderer (takumi-js) is a native addon and loads its font
+# from node_modules at runtime (import.meta.resolve) — neither exists inside a
+# compiled binary. Those two packages stay external and are installed next to the
+# bundle; everything else (elysia, drizzle, the @app/* packages) is bundled in.
 
 FROM oven/bun:1 AS build
 WORKDIR /app
-
-# Install keyed on the workspace manifests only — every workspace's package.json,
-# so the frozen lockfile resolves as-is. Identical across all images, so this
-# layer is built once and shared.
 COPY package.json bun.lock tsconfig.json ./
 COPY apps/auth/package.json apps/auth/
 COPY apps/event/package.json apps/event/
@@ -25,19 +23,19 @@ COPY packages/mail/package.json packages/mail/
 COPY packages/storage/package.json packages/storage/
 COPY packages/tickets/package.json packages/tickets/
 RUN bun install --frozen-lockfile
-
 COPY packages ./packages
 COPY apps/event ./apps/event
+RUN bun build apps/event/src/index.ts --target bun --minify-whitespace --minify-syntax \
+      --external takumi-js --external @fontsource-variable/google-sans --outfile /out/index.js
 
-ENV NODE_ENV=production
-# --minify-whitespace/--minify-syntax only (full --minify mangles names).
-RUN cd apps/event && bun build --compile --minify-whitespace --minify-syntax --target bun \
-      --outfile /app/server src/index.ts
-
-FROM gcr.io/distroless/base-debian12:nonroot
+FROM oven/bun:1-slim
 WORKDIR /app
-COPY --from=build /app/server ./server
+# versions pinned to what bun.lock resolves
+RUN echo '{"dependencies":{"takumi-js":"2.17.1","@fontsource-variable/google-sans":"5.3.2"}}' > package.json \
+ && bun install --production && rm -rf /root/.bun/install/cache
+COPY --from=build /out/index.js ./index.js
 ENV NODE_ENV=production
-USER nonroot
+# uid 1000 = the `bun` user in oven/bun images. Numeric so k8s runAsNonRoot can verify it.
+USER 1000
 EXPOSE 3000
-CMD ["./server"]
+CMD ["bun", "index.js"]
