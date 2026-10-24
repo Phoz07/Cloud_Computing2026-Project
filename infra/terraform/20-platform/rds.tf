@@ -1,37 +1,20 @@
-# One db.t3.micro. The three service databases (auth_db / event_db /
-# registration_db) and their owners are created in-cluster by a Kubernetes Job
-# connecting as this master user — NOT by Terraform's postgresql provider, which
-# would need network reachability to RDS from a laptop (SYSTEM-DESIGN.md §7.1).
+# One db.t3.micro, ONE database (`eventide`, created by RDS via db_name) and one
+# role: the v2 schema is a single Drizzle schema with cross-table foreign keys
+# (events.organizer_id -> users.id), so there is nothing to split. Migrations run
+# in-cluster as the chart's db-migrate hook Job connecting as this master user —
+# NOT by Terraform's postgresql provider, which would need network reachability
+# to RDS from a laptop (SYSTEM-DESIGN.md §7.1). ponytail: one role; split per
+# service only if the rubric asks for least privilege.
 
 resource "random_password" "db_master" {
   length  = 24
   special = false # keep it URL-safe for DATABASE_URL
 }
 
-# Per-service role passwords. The db-bootstrap Job CREATE ROLEs with these; the
-# services' DATABASE_URLs (assembled by scripts/deploy.sh from this same secret)
-# use the same values. All regenerated on every rebuild, alongside the master password.
-resource "random_password" "svc" {
-  for_each = toset(["auth_svc", "event_svc", "registration_svc", "payment_svc"])
-  length   = 20
-  special  = false
-}
-
-# Key-encryption key for better-auth's JWKS private keys. better-auth requires
-# >= 32 chars. Regenerated on every rebuild — auth_db is recreated too, so the
-# jwks row is always fresh. Carried in the rds-master secret (scripts/deploy.sh
-# reads it into the eventide-auth k8s Secret).
+# Better Auth's secret (session signing, >= 32 chars). Regenerated on every
+# rebuild — the database is recreated too, so no session outlives it. Carried in
+# the rds-master secret (scripts/deploy.sh reads it into the eventide-auth k8s Secret).
 resource "random_password" "better_auth" {
-  length  = 48
-  special = false
-}
-
-resource "random_password" "internal_service" {
-  length  = 48
-  special = false
-}
-
-resource "random_password" "ticket_signing" {
   length  = 48
   special = false
 }
@@ -72,6 +55,9 @@ resource "aws_db_instance" "main" {
   storage_type      = "gp3"
   storage_encrypted = true # AWS-managed aws/rds key — no CMK needed
 
+  # Changing db_name forces replacement — irrelevant here, the instance is
+  # destroyed every session anyway.
+  db_name  = var.project
   username = "eventide_master"
   password = random_password.db_master.result
 
@@ -92,34 +78,29 @@ resource "aws_db_instance" "main" {
   performance_insights_enabled = false
 }
 
-# Master credentials + endpoint, for the DB-bootstrap Job and for assembling each
-# service's DATABASE_URL. Lives in 20-platform (recreated each rebuild with a
-# fresh password) — recovery_window_in_days = 0 so the name frees immediately.
+# Master credentials + endpoint: DATABASE_URL for every service and the migrate
+# Job (scripts/deploy.sh → the eventide-common k8s Secret). Lives in 20-platform
+# (recreated each rebuild with a fresh password) — recovery_window_in_days = 0 so
+# the name frees immediately.
 resource "aws_secretsmanager_secret" "db_master" {
   name                    = "${var.project}/rds-master"
-  description             = "RDS master credentials + endpoint. Consumed by the DB-bootstrap Job."
+  description             = "RDS master credentials + endpoint + BETTER_AUTH_SECRET. Consumed by scripts/deploy.sh."
   recovery_window_in_days = 0
 }
 
 resource "aws_secretsmanager_secret_version" "db_master" {
   secret_id = aws_secretsmanager_secret.db_master.id
-  secret_string = jsonencode(merge(
-    {
-      username = aws_db_instance.main.username
-      password = random_password.db_master.result
-      host     = aws_db_instance.main.address
-      port     = aws_db_instance.main.port
-      dbname   = "postgres"
-      # Ready-to-use for the db-bootstrap Job's env (scripts/bootstrap.ts).
-      # `?sslmode=require` — RDS PG16's default parameter group sets rds.force_ssl=1,
-      # so a plain connection is rejected ("no pg_hba.conf entry ... no encryption").
-      # `require` = encrypt, don't verify the cert (fine inside the VPC).
-      MASTER_DATABASE_URL    = "postgres://${aws_db_instance.main.username}:${random_password.db_master.result}@${aws_db_instance.main.endpoint}/postgres?sslmode=require"
-      BETTER_AUTH_SECRET     = random_password.better_auth.result
-      INTERNAL_SERVICE_TOKEN = random_password.internal_service.result
-      TICKET_SIGNING_SECRET  = random_password.ticket_signing.result
-    },
-    # AUTH_SVC_PASSWORD / EVENT_SVC_PASSWORD / REGISTRATION_SVC_PASSWORD
-    { for k, v in random_password.svc : "${upper(k)}_PASSWORD" => v.result },
-  ))
+  secret_string = jsonencode({
+    username = aws_db_instance.main.username
+    password = random_password.db_master.result
+    host     = aws_db_instance.main.address
+    port     = aws_db_instance.main.port
+    dbname   = aws_db_instance.main.db_name
+    # Ready-to-use for every pod (packages/db reads DATABASE_URL; the migrate Job too).
+    # `?sslmode=require` — RDS PG16's default parameter group sets rds.force_ssl=1,
+    # so a plain connection is rejected ("no pg_hba.conf entry ... no encryption").
+    # `require` = encrypt, don't verify the cert (fine inside the VPC).
+    DATABASE_URL       = "postgres://${aws_db_instance.main.username}:${random_password.db_master.result}@${aws_db_instance.main.endpoint}/${aws_db_instance.main.db_name}?sslmode=require"
+    BETTER_AUTH_SECRET = random_password.better_auth.result
+  })
 }

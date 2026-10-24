@@ -12,7 +12,7 @@ the $50 cap in ~15 days.
 | NLB + 2 target groups + ASG attachments | `:80` TCP → ingress-nginx `:80` NodePort (`30080`). `:443` is a **TLS listener + ACM cert** → `30080` when `10-foundation` has a custom domain (`dns.tf`), else plain-TCP passthrough → `30443`. Built by Terraform so `destroy` is reliable. |
 | Route 53 ALIAS A-record (`route53.tf`, conditional) | `events.<domain>` → the fresh NLB, re-pointed every apply. Zero manual steps. Present only when `10-foundation` remote state carries a zone ID + cert ARN. |
 | **ingress-nginx** (`helm_release`, `addons.tf`) | Chart 4.15.1, NodePort, values from `infra/helm/ingress-nginx.values.yaml`. In Terraform so `make up` gives a cluster that's ready for the app; dies with the cluster on `down`. |
-| `eventide/rds-master` secret | master creds + endpoint for the DB-bootstrap Job. |
+| `eventide/rds-master` secret | master creds + endpoint + `DATABASE_URL` + `BETTER_AUTH_SECRET` for scripts/deploy.sh and the db-migrate hook Job. |
 
 ## Prerequisites
 
@@ -53,6 +53,6 @@ Read the verification block. Every list must be empty. Then check the lab credit
 
 - ingress-nginx Helm install with the NodePorts above (week 1 Day 3).
 - `:443` listener → TLS type + ACM cert ARN (week 2).
-- DB-bootstrap Job that reads `eventide/rds-master` and creates the 3 DBs + users.
+- The chart's db-migrate hook Job that runs `drizzle-kit migrate` on the single `eventide` database (DATABASE_URL from `eventide/rds-master`).
 - `AttachRolePolicy` test — if it works, attach S3/SecretsManager to the node role
   and the per-session credential Secret disappears.
