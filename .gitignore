@@ -32,3 +32,15 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# terraform (commit .terraform.lock.hcl — it pins provider versions)
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars.local
+*.auto.tfvars
+!*.auto.tfvars.example
+
+# claude code local settings
+.claude/settings.local.json
