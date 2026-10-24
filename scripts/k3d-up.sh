@@ -28,7 +28,6 @@ CLUSTER=eventide
 REG_PORT=5111                              # host -> k3d registry (container :5000)
 REG_INCLUSTER="eventide-registry:${REG_PORT}"
 INGRESS_VERSION=4.15.1
-INGRESS_IMAGE="registry.k8s.io/ingress-nginx/controller:v1.15.1"  # chart 4.15.1's appVersion
 IMAGES="auth event registration payment mail-worker web db-bootstrap"
 SERVICES="auth event registration payment mail-worker web" # chart deployments we build
 dockerfile_for() { case "$1" in db-bootstrap) echo packages/db/Dockerfile ;; *) echo "apps/$1/Dockerfile" ;; esac; }
@@ -55,10 +54,9 @@ fi
 kubectl config use-context "k3d-${CLUSTER}" >/dev/null
 
 # --- ingress-nginx (same values as EKS + k3d overlay) ------------------
-echo "== preload ${INGRESS_IMAGE} into k3d =="
-docker image inspect "${INGRESS_IMAGE}" >/dev/null 2>&1 || docker pull "${INGRESS_IMAGE}"
-k3d image import "${INGRESS_IMAGE}" -c "${CLUSTER}"
-
+# No `k3d image import` preload: with Docker's containerd image store it fails
+# ("ctr: content digest … not found" on a multi-platform `docker save`), and the
+# nodes pull registry.k8s.io directly anyway.
 echo "== helm install ingress-nginx =="
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx >/dev/null 2>&1 || true
 helm repo update ingress-nginx >/dev/null
@@ -118,7 +116,7 @@ mksecret eventide-mail-worker \
 
 # --- deploy the chart (same chart as EKS, values-local overlay) -------
 echo "== helm upgrade --install eventide (db-migrate hook runs first) =="
-helm upgrade --install eventide infra/helm/eventide \
+helm upgrade --install eventide infra/helm/eventide --namespace eventide \
   -f infra/helm/eventide/values.yaml \
   -f infra/helm/eventide/values.local.yaml \
   --set imageRegistry="${REG_INCLUSTER}" \

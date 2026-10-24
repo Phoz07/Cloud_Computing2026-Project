@@ -105,7 +105,7 @@ echo "mail: $([ -n "$GMAIL_SECRET" ] && echo gmail || echo 'dry-run (no eventide
 
 # --- deploy the chart (the db-migrate hook runs before the pods roll) --------
 echo "== helm upgrade --install eventide =="
-helm upgrade --install eventide infra/helm/eventide \
+helm upgrade --install eventide infra/helm/eventide --namespace eventide \
   -f infra/helm/eventide/values.yaml \
   -f infra/helm/eventide/values.aws.yaml \
   --set imageRegistry="$REG" \

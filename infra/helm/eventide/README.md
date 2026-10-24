@@ -20,6 +20,8 @@ Not here: ingress-nginx and the NLB (cluster lifecycle — `20-platform/addons.t
 - Per deploy: `--set imageRegistry=… --set publicUrl=… --set files.bucket=… --set dbMigrate.image.tag=… --set services.<x>.image.tag=…` (`scripts/deploy.sh`, `scripts/k3d-up.sh`).
 - `commonEnv` is rendered into every app pod (`REDIS_URL`, `AUTH_SERVICE_URL`, `BETTER_AUTH_URL`, `DB_POOL_MAX`); `commonSecretName` + `services.<x>.secretName` are `envFrom`'d. The chart never creates Secrets — the scripts do (ESO templates stay behind `eso.enabled` for a non-lab environment).
 
+The release is recorded in the `eventide` namespace (`helm -n eventide ls`); every resource carries `namespace: eventide` explicitly.
+
 ## Render / lint
 
 ```sh

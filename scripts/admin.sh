@@ -8,8 +8,11 @@
 set -euo pipefail
 
 EMAIL="${1:?usage: admin.sh <email>}"
-IMG="$(kubectl -n eventide get deploy auth -o jsonpath='{.spec.template.spec.containers[0].image}')"
+# Same image, env (REDIS_URL, AUTH_SERVICE_URL, …) and Secrets as the running auth pod.
+AUTH_JSON="$(kubectl -n eventide get deploy auth -o json)"
+IMG="$(echo "$AUTH_JSON" | jq -r '.spec.template.spec.containers[0].image')"
+ENV="$(echo "$AUTH_JSON" | jq -c '.spec.template.spec.containers[0].env')"
 kubectl -n eventide run "promote-admin-$(date +%s)" --rm -i --restart=Never --image="$IMG" \
-  --overrides="$(jq -cn --arg img "$IMG" --arg email "$EMAIL" \
-    '{spec:{containers:[{name:"p",image:$img,command:["/app/promote-admin",$email],
+  --overrides="$(jq -cn --arg img "$IMG" --arg email "$EMAIL" --argjson env "$ENV" \
+    '{spec:{containers:[{name:"p",image:$img,command:["/app/promote-admin",$email],env:$env,
       envFrom:[{secretRef:{name:"eventide-common"}},{secretRef:{name:"eventide-auth"}}]}]}}')"
