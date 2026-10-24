@@ -37,6 +37,7 @@ flowchart LR
   E -.->|"ตรวจ session"| A
   R -.->|"ตรวจ session"| A
   P -.->|"ตรวจ session"| A
+  E & R & P -.->|"cache session 60s"| RD[("Redis")]
   P <--> ST["Stripe"]
   A & E & R & P --> PG[("Postgres")]
   A & E & R & P --> Q[["SQS mail-queue"]]
@@ -160,8 +161,13 @@ apps/
   mail-worker/    ส่งอีเมลจากคิว
 packages/
   db/  auth-guard/  mail/  storage/  tickets/
-infra/            ค่าตั้งคิวของ ElasticMQ สำหรับ docker-compose
-docs/             เอกสารออกแบบ
+infra/
+  elasticmq/      ค่าตั้งคิวของ ElasticMQ สำหรับ docker-compose
+  terraform/      00-bootstrap · 10-foundation (ECR, S3, SQS, secrets, DNS) · 20-platform (EKS, RDS, NLB)
+  helm/eventide/  Helm chart ของทั้งระบบ (ใช้ชุดเดียวกันทั้ง k3d และ EKS)
+scripts/          deploy.sh · teardown.sh · k3d-up.sh · admin.sh · check-lab.sh
+load/k6/          load test สำหรับ HPA
+docs/             เอกสารออกแบบ + รายงาน
 ```
 
 แต่ละ service จัดโค้ดเป็น `src/routes/<feature>/{index,model,service}.ts`: controller, schema ของ request/response และ business logic
@@ -173,3 +179,22 @@ docs/             เอกสารออกแบบ
 - [docs/stripe.md](docs/stripe.md): ตั้งค่า Stripe ตั้งแต่ sandbox จนถึง webhook บน production
 - [docs/storage.md](docs/storage.md): การอัปโหลดและเก็บไฟล์
 - [CLAUDE.md](CLAUDE.md): ข้อตกลงในการเขียนโค้ดของโปรเจกต์ทั้งหมด
+
+## Deploy (k3d / AWS)
+
+ระบบ deploy ขึ้น EKS บน AWS Academy Learner Lab ด้วย Terraform + Helm และรัน chart ชุดเดียวกันบน k3d ในเครื่องได้
+
+```sh
+make k3d          # k3d + ingress-nginx + chart ทั้งระบบ (ใช้ Postgres/MinIO/ElasticMQ จาก docker compose) → http://localhost:8080
+make k3d-down
+
+bash scripts/check-lab.sh   # หลัง Start Lab ทุกครั้ง
+make up           # terraform apply 20-platform (EKS + RDS + NLB + ingress-nginx)
+make deploy       # build 7 images → ECR, สร้าง k8s Secrets, helm upgrade (migrate ก่อน), roll out
+make admin EMAIL=you@example.com   # ตั้ง admin คนแรก หลังสมัครผ่านหน้าเว็บ
+make down         # terraform destroy 20-platform — ทำทุกครั้งก่อนจบ session
+```
+
+รายละเอียด: [docs/SYSTEM-DESIGN.md](docs/SYSTEM-DESIGN.md) (สถาปัตยกรรม, §1.1 สรุปสิ่งที่เปลี่ยนตอน merge v2),
+[docs/PROJECT-KNOWLEDGE-BASE.md](docs/PROJECT-KNOWLEDGE-BASE.md) (เหตุผลของการตัดสินใจ, ข้อจำกัดของ lab),
+[docs/TODO.md](docs/TODO.md) (checklist และ GATE), [CLAUDE.md](CLAUDE.md) (ส่วน Cloud infrastructure)

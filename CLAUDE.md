@@ -21,7 +21,7 @@ Eventide: an event ticketing website built as a Bun-workspace monorepo of micros
   - Organizer applications live in `apps/auth` (`/api/auth/organizer-applications`, table `organizer_applications`). Approving one sets the role in a transaction.
   - `GET /api/auth/organizers/:id` is the public organizer profile the event page shows (organization name from the approved application, avatar, approval date). It never returns the email or the application's contact/reason, and answers 404 for plain users.
   - Deleting an account (self-delete or the admin plugin's remove-user) is refused with `ORGANIZER_HAS_EVENTS` while the user organizes events. `events.organizer_id` is `ON DELETE RESTRICT`, and Better Auth deletes a user's sessions and accounts before the user row, so the check has to run before Better Auth starts.
-  - Bootstrap the first admin with `cd apps/auth && bun run admin:promote <email>` after registering in the web.
+  - Bootstrap the first admin with `cd apps/auth && bun run admin:promote <email>` after registering in the web (on a cluster: `make admin EMAIL=<email>`).
 - **Service auth:** only `apps/auth` touches the auth tables and holds `BETTER_AUTH_SECRET`. Every other service does `.use(authGuard)` from `@app/auth-guard`.
   - On each request the guard forwards the cookie to `AUTH_SERVICE_URL/api/auth/get-session` and caches the answer in Redis for 60s.
   - `databaseHooks` in `apps/auth/src/libs/auth.ts` write a revoked marker on ban, role change and sign-out, so those apply on the next request. Anything else that changes a role or deletes sessions outside Better Auth must call `markUserRevoked()`.
@@ -202,3 +202,141 @@ test/<feature>.test.ts
   - The route fetches data via Query.
 - **Hotkeys:** use `@tanstack/react-hotkeys` (`useHotkey("Mod+S", …)`; the event editor's save bar is the example).
 - **Drag to reorder:** `@dnd-kit/react` (`DragDropProvider` + `useSortable`, with `isSortable(source)` in `onDragEnd` feeding TanStack Form's `field.moveValue`). The ticket-type question builder is the example; it collapses the other items while dragging because they differ a lot in height.
+
+## Cloud infrastructure (the graded half)
+
+This is the **Cloud Computing 2026 term project** (IT KMITL): graded on both the app and
+the infra, with a report and a live demo. The v2 app above was merged onto the existing
+infra on 2026-10-24 — spec `docs/superpowers/specs/2026-10-24-v2-infra-merge-design.md`,
+plan `docs/superpowers/plans/2026-10-24-v2-infra-merge.md`.
+
+**State:** `infra/terraform/00-bootstrap` (tfstate bucket, by hand) · `10-foundation`
+(7 ECR repos, uploads S3 bucket + `public/*` read policy, SQS mail queue + DLQ, optional
+`eventide/{google-oauth,stripe,gmail}` secrets, optional Route 53 zone + ACM cert) ·
+`20-platform` (raw `aws_eks_cluster` + node group, `db.t3.micro` RDS with ONE database
+`eventide`, Terraform NLB → ingress-nginx NodePort, metrics-server) · `infra/helm/eventide`
+(auth, event, registration, payment, mail-worker, redis, web, `/files` → S3, db-migrate
+hook) · `scripts/{deploy,teardown,k3d-up,k3d-down,admin,check-lab}.sh`. The k3d parity
+GATE passed locally; **the v2 layout has not been applied to AWS yet** — next lab session:
+`check-lab.sh` → `terraform apply` 10-foundation (its README lists the expected diff) →
+`dns.auto.tfvars` with the real domain → `make up` → `make deploy` → `make down`.
+
+### Read these before doing anything
+
+| File | Role |
+|---|---|
+| `docs/SYSTEM-DESIGN.md` | **What** is being built — architecture, services, security, IaC layout. §1.1 lists what the v2 merge changed. |
+| `docs/PROJECT-KNOWLEDGE-BASE.md` | **Why** — decision log (with superseded rows), verified lab constraints, trap table, report talking points. |
+| `docs/TODO.md` | The build checklist. **`GATE`** items must pass before the next step; cut from the bottom, never a GATE. §0.6 is the current work. |
+| `docs/{auth,storage,stripe,tickets}.md` | The v2 app's own design notes. |
+| `docs/lab-probe-2026-09-0{6,7}.txt` | Raw output of the AWS Learner Lab capability probes. |
+
+Do not re-litigate decisions recorded in the knowledge-base decision log. If a change
+contradicts one, flag it against that entry.
+
+### The governing principle
+
+> Get a hello-world pod answering HTTP on real EKS, deployed by Terraform, before writing a
+> single feature.
+
+Infrastructure does not compress under deadline pressure; features do.
+
+### Environment constraints (probed live against AWS account 735838417080, us-east-1)
+
+These are hard and load-bearing — most odd design choices trace back to one of them:
+
+- **$50 hard cap.** Exceeding it locks the account and deletes all work. `~$1.10` per 4-hour
+  session; leaving the platform layer up exhausts the budget in ~15 days.
+- **`terraform destroy` the `20-platform` layer at the end of every session** (`make down`).
+  The lab auto-stops EC2 only; RDS, the EKS control plane and ELBs keep billing. Worker
+  nodes are in an ASG that relaunches lab-stopped instances.
+- **No IRSA** (`iam:CreateOpenIDConnectProvider` denied) — also no GitHub Actions OIDC, so
+  CI checks + builds only and deploy is a local script. Pods get the lab **session
+  credentials** (S3 + SQS) through the `eventide-common` Secret; they expire with the
+  session — `make deploy` every session.
+- **No `iam:CreateRole`** — Terraform reuses the lab's `LabEksClusterRole` / `LabEksNodeRole`
+  via `data "aws_iam_roles"` + `name_regex`. Never hardcode the ARNs.
+- **Default VPC only, no NAT gateway.** Subnets pinned to **us-east-1a/b/c**.
+- **An org SCP denies `s3:GetBucketObjectLockConfiguration`** — every bucket is CLI-created
+  (`terraform_data` + `local-exec`) and consumed via `data "aws_s3_bucket"`; config goes in
+  granular `aws_s3_bucket_*` resources. See `infra/terraform/10-foundation/s3.tf`.
+- **`iam:GetRole` on `voclabs` is denied** — rules out `terraform-aws-modules/eks`. Raw
+  `aws_eks_*` resources only.
+- **Unprobed (probed by `scripts/check-lab.sh` next session):** `sqs:*` and the account-level
+  S3 Public Access Block. Fallbacks: an ElasticMQ pod / streaming `/files/*` through `event`.
+- Session credentials expire with the 4-hour session. **Never start an EKS apply after hour 3.**
+- Re-run `bash scripts/check-lab.sh` after any lab reset — role suffixes and permissions change.
+
+### Infra architecture in brief
+
+- **One RDS `db.t3.micro`, one database `eventide`, one role.** The v2 schema is a single
+  Drizzle schema with cross-table FKs. Migrations = the chart's `db-migrate` pre-install/
+  pre-upgrade hook (`packages/db/Dockerfile`, `drizzle-kit migrate`) — every `make deploy`
+  migrates before pods roll. `DB_POOL_MAX=4` per pod (≈ 87 connections on `t3.micro`).
+- **Auth across services** = Better Auth cookie session; `@app/auth-guard` introspects
+  `AUTH_SERVICE_URL` (in-cluster `auth` Service) and caches 60 s in the **`redis` pod** (no
+  persistence; losing it is one slow request, never a wrong one).
+- **Uploads** go through the owning service; the browser reads `/files/<key>`, which a
+  second Ingress rewrites to the bucket on S3 (`values.aws.yaml`) or MinIO (`values.local.
+  yaml`). Only `public/*` is readable — the bucket policy decides, not the ingress.
+- **Mail** = `@app/mail` → SQS `eventide-mail-queue` → `mail-worker` Deployment → Gmail
+  SMTP. Without `eventide/gmail` it runs dry and logs. **Payment** = Stripe; without
+  `eventide/stripe` checkout is off. Both are Terraform-managed from gitignored
+  `*.auto.tfvars` in `10-foundation`.
+- **ingress-nginx as a `NodePort` Service + an NLB created by Terraform** (never
+  `type=LoadBalancer` — that ELB would orphan outside Terraform state).
+- **Secrets** — `scripts/deploy.sh` builds four k8s Secrets each session: `eventide-common`
+  (DATABASE_URL, S3_*, AWS_* session creds, MAIL_QUEUE_URL), `eventide-auth`
+  (BETTER_AUTH_SECRET, GOOGLE_*), `eventide-payment` (STRIPE_*), `eventide-mail-worker`
+  (GMAIL_*). Same chart on k3d with dev values. **ESO stays off** (SYSTEM-DESIGN §5.2.1).
+- **Terraform split by lifetime:** `00-bootstrap` (by hand) · `10-foundation` (never
+  destroyed) · `20-platform` (destroyed nightly).
+- **DNS/TLS:** `events.<domain>` delegated to Route 53, apex on Cloudflare; zone + wildcard
+  ACM cert are permanent (`10-foundation/dns.tf`, opt-in via `dns.auto.tfvars`); the NLB
+  TLS listener + ALIAS record rebuild nightly. Single host — SPA at `/`, APIs at `/api/*`,
+  files at `/files/*`, no CORS. Stripe's webhook and Google's redirect URI both need this
+  HTTPS host. Never recreate the hosted zone.
+
+### Infra commands
+
+`make dev` (compose + migrate + every app in watch mode) · `make db-reset` · `make k3d` /
+`make k3d-down` (local parity: same chart, host compose stack) · `make up` (terraform apply
+`20-platform` + kubeconfig) · `make deploy` (`scripts/deploy.sh`: 7 images → ECR, Secrets,
+helm upgrade with the migrate hook) · `make admin EMAIL=…` (first admin, after registering
+in the web) · `make load BASE_URL=…` (k6 vs `/api/events`) · `make down` (`teardown.sh` —
+every session end). `bash scripts/check-lab.sh` after every lab reset. CI (`.github/
+workflows/ci.yml`) runs the compose-backed tests, the web build and all 7 image builds —
+no AWS.
+
+### Rules that cause slow, confusing bugs if broken
+
+- **Probes hit `GET /api/<prefix>/health`, which must never touch Postgres or Redis.** A
+  liveness probe that queries the DB turns a 5-second RDS blip into every pod restarting.
+- **`/files/*` is public only under `public/*`.** Never store a private file with a
+  `public/` key; never widen the bucket policy.
+- **Never break an Elysia method chain** — Eden Treaty's end-to-end types depend on it; a
+  broken chain silently degrades the SPA's types to `any`.
+- **Request models are Elysia `t` / TypeBox only** (`model.ts`). Zod stays in the web forms.
+- **`DB_POOL_MAX`** is the only per-pod DB knob; raising replicas without lowering it exhausts
+  `t3.micro`'s ~87 connections and fails the HPA load test on connections, not CPU.
+- Bun services must **handle `SIGTERM`** (mail-worker already does; Elysia's `listen` does).
+- RDS: `skip_final_snapshot = true`, `deletion_protection = false`, or the nightly destroy fails.
+- HPA max is **8 replicas** — a `t3.medium` allows only 17 pods; beyond the ceiling pods sit
+  `Pending` with an error that looks like a bug. Run the load test with
+  `NODE_INSTANCE_TYPE=t3.medium make up`.
+- Image size floor is Bun 1.4's `--compile` runtime (~104 MB per binary); the migrate image
+  is ~250 MB. Pushing over a VPN has stalled before — push off-VPN or lower the MTU.
+
+### Open blockers (see `docs/TODO.md` §0)
+
+1. The **assignment brief has never been seen** — every scope decision is inference.
+2. Exact **checkpoint date** and what it requires.
+3. **Final demo date.**
+4. The **real domain** for `dns.auto.tfvars` (decided 2026-10-24: a real domain, applied in
+   the next lab session).
+
+### Security
+
+Paste script *output* into chats, never `aws_secret_access_key` / `aws_session_token`. Live
+lab credentials were pasted into a chat on 2026-09-06; the session was rotated afterward.
+Never commit `.env` or `*.auto.tfvars`.

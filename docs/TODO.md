@@ -56,6 +56,32 @@ TanStack + shadcn SPA.
 
 ---
 
+## 0.6 V3 — the v2 app on the infra (2026-10-24 →)
+
+The finished v2 app (`suwizx/…@v2`) replaced the V2-plan services; the infra was adapted to
+it (single DB, Redis pod, SQS mail worker, `/files` → S3, 4 k8s Secrets). Spec:
+`docs/superpowers/specs/2026-10-24-v2-infra-merge-design.md` · plan:
+`docs/superpowers/plans/2026-10-24-v2-infra-merge.md` · branch `feat/v2-infra` → PR to `main`.
+
+- [x] Branch from v2, restore infra from `main`; `DB_POOL_MAX`, compose `BIND_HOST`; 7 Dockerfiles.
+- [x] Helm chart for the v2 topology (`helm lint` ×2 green); Terraform `10-foundation` +
+      `20-platform` adapted (`terraform validate` ×2 green); `deploy.sh` / `k3d-up.sh` /
+      `admin.sh` / `check-lab.sh` / Makefile; CI rewritten.
+- [x] **`GATE`** — `make k3d`: four `/api/*/health` → `โอเค`, cookie login through the
+      ingress, avatar upload → `/files/public/…` 200, `/files/private/…` 403, mail-worker
+      dry-run log, `make admin` promotes.
+- [ ] Docs synced (this file, CLAUDE/AGENTS, README, KB supersede rows, SYSTEM-DESIGN §1.1); PR merged.
+- [ ] **Lab session** — `bash scripts/check-lab.sh` (read the SQS + Public-Access-Block lines)
+      → `terraform -chdir=infra/terraform/10-foundation apply` (expected diff in its README)
+      → `dns.auto.tfvars` with the real domain + apply + paste NS into Cloudflare → `make up`
+      → `make deploy` → the GATE curls against `https://<domain>` → `make admin EMAIL=…` →
+      `make down`. **`GATE`**
+- [ ] Stripe webhook endpoint (`https://<domain>/api/payment/webhook`) + Gmail App Password →
+      `stripe.auto.tfvars` / `gmail.auto.tfvars` — optional; dry run until then.
+- [ ] `REPORT.md` + `DEMO-RUNSHEET.md` pass for the v2 app.
+
+---
+
 ## 1. Daily ritual
 
 ### Every session start  (see `docs/week1-closeout.md` for the copy-paste version)
@@ -69,12 +95,11 @@ TanStack + shadcn SPA.
       describe-certificate` to read `ISSUED`.
 - [ ] `make up` — `terraform apply 20-platform` (~17 min) + kubeconfig + `get nodes`.
       Add `NODE_INSTANCE_TYPE=t3.medium` for the week-4 HPA load test.
-- [ ] `make db-bootstrap` — build+push the db-bootstrap image, run the Job (4 DBs).
-- [ ] `make deploy` (Helm — `auth`, `event`, `registration`, `payment`, `web` + the
-      expiry CronJob) then `make seed-eks` (in-cluster — RDS is private).
-- [ ] `scripts/lab-creds.sh` is **not needed** — `deploy.sh` builds the k8s Secrets from
-      `eventide/rds-master` (+ `eventide/google-oauth` if present) and no app code calls
-      the AWS SDK except `event`'s S3 presign (which gets injected session creds).
+- [ ] `make deploy` — 7 images → ECR, the four k8s Secrets, `helm upgrade` (the `db-migrate`
+      hook migrates first), roll out. No separate DB-bootstrap step any more.
+- [ ] Register in the web, then `make admin EMAIL=<that email>` (v2 has no seed).
+- [ ] The session credentials in `eventide-common` (S3 + SQS from the pods) expire with the
+      session — re-run `make deploy` each session.
 
 ### Every session end — non-negotiable
 
