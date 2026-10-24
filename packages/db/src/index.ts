@@ -2,7 +2,9 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
 
-export const db = drizzle(postgres(process.env.DATABASE_URL!), { schema });
+// ponytail: pool per process; the chart sets DB_POOL_MAX=4 (db.t3.micro ≈ 87 connections, 13 pods under HPA)
+const max = Number(process.env.DB_POOL_MAX ?? 10);
+export const db = drizzle(postgres(process.env.DATABASE_URL!, { max }), { schema });
 export type DB = typeof db;
 
 export * from "./schema";

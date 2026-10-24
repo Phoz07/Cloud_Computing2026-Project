@@ -1,7 +1,7 @@
 services:
   postgres:
     image: postgres:18-alpine
-    ports: ["127.0.0.1:5432:5432"]
+    ports: ["${BIND_HOST:-127.0.0.1}:5432:5432"]
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
@@ -15,7 +15,7 @@ services:
 
   redis:
     image: redis:8-alpine
-    ports: ["127.0.0.1:6379:6379"]
+    ports: ["${BIND_HOST:-127.0.0.1}:6379:6379"]
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redisdata:/data
@@ -27,8 +27,8 @@ services:
   elasticmq:
     image: softwaremill/elasticmq-native:1.6.16
     ports:
-      - "127.0.0.1:9324:9324"
-      - "127.0.0.1:9325:9325"
+      - "${BIND_HOST:-127.0.0.1}:9324:9324"
+      - "${BIND_HOST:-127.0.0.1}:9325:9325"
     volumes:
       - ./infra/elasticmq/elasticmq.conf:/opt/elasticmq.conf
 
@@ -36,8 +36,8 @@ services:
     image: pgsty/silo:RELEASE.2026-10-18T00-00-00Z
     command: server /data --console-address ":9001"
     ports:
-      - "127.0.0.1:9000:9000"
-      - "127.0.0.1:9001:9001"
+      - "${BIND_HOST:-127.0.0.1}:9000:9000"
+      - "${BIND_HOST:-127.0.0.1}:9001:9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
