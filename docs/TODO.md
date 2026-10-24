@@ -74,13 +74,18 @@ it (single DB, Redis pod, SQS mail worker, `/files` → S3, 4 k8s Secrets). Spec
 - [x] 2026-10-24: `suwizx/v2` final (seat holds + live seats, OG images, Stripe verify, React Email) merged; web is now a Bun server, event/mail-worker bundled; CI/CD deploy job added (branch `feat/final-v2-cicd`).
 - [x] Terraform collapsed to ONE root (`infra/terraform/`, `modules/platform` behind
       `var.platform`); credentials in `infra/aws.env` only (2026-10-24, Vnntnn's request).
-- [ ] **Lab session** — paste creds into `infra/aws.env` → `bash scripts/check-lab.sh` (read
-      the SQS + Public-Access-Block lines) → `infra/terraform/dns.auto.tfvars` with the real
-      domain → `make up` (tf-init creates the state bucket if needed and carries the old
-      `10-foundation` state over once; expect +mail-worker ECR, +2 SQS, +bucket policy,
-      −4 placeholder secrets, −CORS, + the whole platform) → paste NS into Cloudflare →
-      `make deploy` → the GATE curls against `https://<domain>` → `make admin EMAIL=…` →
-      `make down`. **`GATE`**
+- [x] **`GATE` — first EKS session on the single root (2026-10-24, account 524450451918,
+      fresh build from zero, no domain yet):** `check-lab.sh` (SQS allowed, no account-level
+      Public Access Block) → `make up` (44 resources; the Helm token had to become `exec`-based,
+      fixed) → `make deploy` (7 images, 4 Secrets, migrate Job completed, 7 rollouts) → on
+      `http://<nlb>`: health ×4 `โอเค`, web 200, sign-up + cookie session, avatar upload →
+      `/files/public/…` 200 from S3 (raw S3 URL 200, `/files/private/x` 403, 4.6 MiB passes
+      the ingress and gets the app's 413), password-reset mail via real SQS → mail-worker
+      dry-run log, `make admin` → role admin, HPA metrics live.
+- [ ] **Lab session (domain)** — `infra/terraform/dns.auto.tfvars` with the real domain →
+      `make up` → paste `terraform output route53_name_servers` into Cloudflare → wait for
+      `ISSUED` → `make deploy` (BETTER_AUTH_URL becomes `https://<domain>`) → the same curls
+      over HTTPS → `make down`. **`GATE`**
 - [ ] Stripe webhook endpoint (`https://<domain>/api/payment/webhook`) + Gmail App Password →
       `stripe.auto.tfvars` / `gmail.auto.tfvars` — optional; dry run until then.
 - [ ] `REPORT.md` + `DEMO-RUNSHEET.md` pass for the v2 app.

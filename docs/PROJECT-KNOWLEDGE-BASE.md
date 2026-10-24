@@ -191,10 +191,11 @@ computing rubric actually measures.
 
 ---
 
-### Added 2026-10-24 (v2 merge) — not yet probed
+### Added 2026-10-24 (v2 merge) — probed the same day on account 524450451918
 
-- `sqs:CreateQueue` / `ListQueues` — `scripts/check-lab.sh` probes it. Fallback: an ElasticMQ pod in the chart (`SQS_ENDPOINT`).
-- Account-level S3 Public Access Block — probed by `check-lab.sh` (`s3control get-public-access-block`). If public bucket policies are blocked, fallback: a `GET /files/*` streaming route in `event` with the pod's credentials.
+- `sqs:*` — **allowed** (`eventide-mail-queue` + DLQ created, mail-worker drains it). Fallback (unused): an ElasticMQ pod.
+- Account-level S3 Public Access Block — **none** (`NoSuchPublicAccessBlockConfiguration`), so the `public/*` bucket policy applies and `/files/*` is served straight from S3. Fallback (unused): stream through `event`.
+- The Helm provider's EKS token must be `exec`-based (`aws eks get-token` at connect time): a `data "aws_eks_cluster_auth"` token minted early in a ~17-minute apply expires (15 min) before the Helm releases run → 401. Hit on the first apply, fixed in `providers.tf`.
 
 ## 4. Traps, with their fixes
 

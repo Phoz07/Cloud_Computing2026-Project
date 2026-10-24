@@ -257,10 +257,10 @@ place: `infra/aws.env`** (copy of `infra/aws.env.example`; gitignored; sourced b
 Make target and script). `infra/helm/eventide` (auth, event, registration, payment,
 mail-worker, redis, web, `/files` → S3, db-migrate hook) ·
 `scripts/{tf-init,deploy,teardown,k3d-up,k3d-down,admin,check-lab}.sh`. The k3d parity
-GATE passed locally; **the v2 layout has not been applied to AWS yet** — next lab session:
-paste creds → `bash scripts/check-lab.sh` → `dns.auto.tfvars` with the real domain →
-`make up` (tf-init carries the old `10-foundation` state over once) → `make deploy` →
-`make down`.
+GATE passed locally and **the first EKS session passed on 2026-10-24** (account
+524450451918, fresh build from zero: `make up` → `make deploy` → health/login/upload/mail/
+admin on `http://<nlb>`). **Not yet done:** the real domain (`dns.auto.tfvars` → Route 53 +
+ACM → HTTPS, which Stripe's webhook and Google OAuth need), Stripe/Gmail credentials.
 
 ### Read these before doing anything
 
@@ -282,7 +282,7 @@ contradicts one, flag it against that entry.
 
 Infrastructure does not compress under deadline pressure; features do.
 
-### Environment constraints (probed live against AWS account 735838417080, us-east-1)
+### Environment constraints (probed live against Learner Lab accounts 735838417080 and 524450451918, us-east-1)
 
 These are hard and load-bearing — most odd design choices trace back to one of them:
 
@@ -303,8 +303,8 @@ These are hard and load-bearing — most odd design choices trace back to one of
   granular `aws_s3_bucket_*` resources. See `infra/terraform/s3.tf`.
 - **`iam:GetRole` on `voclabs` is denied** — rules out `terraform-aws-modules/eks`. Raw
   `aws_eks_*` resources only.
-- **Unprobed (probed by `scripts/check-lab.sh` next session):** `sqs:*` and the account-level
-  S3 Public Access Block. Fallbacks: an ElasticMQ pod / streaming `/files/*` through `event`.
+- **Probed 2026-10-24 (account 524450451918):** SQS allowed; no account-level S3 Public Access
+  Block, so the `public/*` bucket policy applies. (`scripts/check-lab.sh` prints both.)
 - Session credentials expire with the 4-hour session. **Never start an EKS apply after hour 3.**
 - Re-run `bash scripts/check-lab.sh` after any lab reset — role suffixes and permissions change.
 
