@@ -12,9 +12,10 @@
 # overlay. The APP is the same chart as EKS — only values-local vs values-aws and
 # the image registry differ. That is the whole point of the exercise.
 #
-# The three service databases live in the host `docker compose` Postgres; the
-# in-cluster pods reach it at host.k3d.internal:5432. On EKS this is RDS, filled
-# by the db-bootstrap Job; here `packages/db` bootstrap runs from the host.
+# Postgres, Redis (unused by the chart — it runs its own redis pod), ElasticMQ and
+# MinIO come from the host `docker compose` (BIND_HOST=0.0.0.0 so the pods can
+# reach them at host.k3d.internal). On EKS these are RDS / SQS / S3. The chart's
+# db-migrate hook migrates the database in both places.
 #
 #   bash scripts/k3d-up.sh            # tag = git short sha
 #   bash scripts/k3d-up.sh local     # explicit tag
@@ -28,15 +29,14 @@ REG_PORT=5111                              # host -> k3d registry (container :50
 REG_INCLUSTER="eventide-registry:${REG_PORT}"
 INGRESS_VERSION=4.15.1
 INGRESS_IMAGE="registry.k8s.io/ingress-nginx/controller:v1.15.1"  # chart 4.15.1's appVersion
-SERVICES="auth event registration payment web"
+IMAGES="auth event registration payment mail-worker web db-bootstrap"
+SERVICES="auth event registration payment mail-worker web" # chart deployments we build
+dockerfile_for() { case "$1" in db-bootstrap) echo packages/db/Dockerfile ;; *) echo "apps/$1/Dockerfile" ;; esac; }
 TAG="${1:-$(git rev-parse --short HEAD)}"
 
-# Must match apps/auth/src/env.ts's dev default so the auth_db.jwks row created
-# by `make dev` stays decryptable under `make k3d` (and vice versa).
-BETTER_AUTH_SECRET="dev-only-insecure-better-auth-secret-0000000"
-INTERNAL_SERVICE_TOKEN="dev-only-internal-service-token-000000"
-TICKET_SIGNING_SECRET="dev-only-ticket-signing-secret-0000000"
-DB_HOST_INCLUSTER="host.k3d.internal"
+# Dev-only values (match .env.example so `make dev` and `make k3d` share a database).
+BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET:-dev-only-insecure-better-auth-secret-0000000}"
+H="host.k3d.internal" # the docker host, as the pods see it
 
 # --- cluster (idempotent) ------------------------------------------------
 if k3d cluster list -o json | grep -q "\"name\":\"${CLUSTER}\""; then
@@ -73,53 +73,61 @@ helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
   -f infra/helm/ingress-nginx.values.local.yaml \
   --wait --timeout 8m
 
-# --- databases: host compose Postgres + migrations --------------------
-echo "== host Postgres + bootstrap (auth_db / event_db / registration_db) =="
-docker compose up -d db
+# --- host services: Postgres / Redis / ElasticMQ / MinIO ---------------------
+echo "== docker compose (BIND_HOST=0.0.0.0 so the pods can reach the host) =="
+BIND_HOST=0.0.0.0 docker compose up -d
 printf 'waiting for postgres'
-until docker compose exec -T db pg_isready -U postgres >/dev/null 2>&1; do printf '.'; sleep 1; done
+until docker compose exec -T postgres pg_isready -U postgres >/dev/null 2>&1; do printf '.'; sleep 1; done
 echo
-bun run --filter @eventide/db db:bootstrap
+docker compose wait minio-init >/dev/null 2>&1 || true   # one-shot bucket + public/* policy
 
-# --- build -> push to the k3d registry --------------------------------
-for svc in $SERVICES; do
-  echo "== build $svc (native arch, no --platform — k3d nodes match the host) =="
-  docker build -f "apps/$svc/Dockerfile" -t "localhost:${REG_PORT}/eventide/$svc:$TAG" .
-  docker push "localhost:${REG_PORT}/eventide/$svc:$TAG"
+# --- build -> push to the k3d registry ------------------------------------
+for img in $IMAGES; do
+  echo "== build $img (native arch, no --platform — k3d nodes match the host) =="
+  docker build -f "$(dockerfile_for "$img")" -t "localhost:${REG_PORT}/eventide/$img:$TAG" .
+  docker push "localhost:${REG_PORT}/eventide/$img:$TAG"
 done
 
-# --- app Secrets (ESO's job on EKS; a local file here — SYSTEM-DESIGN §5.2) ---
-echo "== eventide-{auth,event,registration} Secrets =="
+# --- app Secrets (deploy.sh's job on EKS; dev values here — SYSTEM-DESIGN §5.2) ---
+echo "== eventide-{common,auth,payment,mail-worker} Secrets =="
 kubectl create namespace eventide --dry-run=client -o yaml | kubectl apply -f -
 mksecret() { kubectl -n eventide create secret generic "$1" "${@:2}" \
   --dry-run=client -o yaml | kubectl apply -f -; }
+mksecret eventide-common \
+  --from-literal=DATABASE_URL="postgres://postgres:postgres@${H}:5432/db" \
+  --from-literal=S3_ENDPOINT="http://${H}:9000" \
+  --from-literal=S3_FORCE_PATH_STYLE="true" \
+  --from-literal=S3_REGION="us-east-1" \
+  --from-literal=S3_BUCKET="event-assets" \
+  --from-literal=S3_ACCESS_KEY_ID="minioadmin" \
+  --from-literal=S3_SECRET_ACCESS_KEY="minioadmin" \
+  --from-literal=AWS_REGION="ap-southeast-1" \
+  --from-literal=AWS_ACCESS_KEY_ID="local" \
+  --from-literal=AWS_SECRET_ACCESS_KEY="local" \
+  --from-literal=SQS_ENDPOINT="http://${H}:9324" \
+  --from-literal=MAIL_QUEUE_URL="http://${H}:9324/000000000000/mail-queue"
 mksecret eventide-auth \
-  --from-literal=DATABASE_URL="postgres://auth_svc:auth_svc@${DB_HOST_INCLUSTER}:5432/auth_db" \
   --from-literal=BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET}"
-mksecret eventide-event \
-  --from-literal=DATABASE_URL="postgres://event_svc:event_svc@${DB_HOST_INCLUSTER}:5432/event_db" \
-  --from-literal=INTERNAL_SERVICE_TOKEN="$INTERNAL_SERVICE_TOKEN"
-mksecret eventide-registration \
-  --from-literal=DATABASE_URL="postgres://registration_svc:registration_svc@${DB_HOST_INCLUSTER}:5432/registration_db" \
-  --from-literal=INTERNAL_SERVICE_TOKEN="$INTERNAL_SERVICE_TOKEN" \
-  --from-literal=TICKET_SIGNING_SECRET="$TICKET_SIGNING_SECRET" \
-  --from-literal=TICKET_SIGNING_KEY_ID="eventide-dev-v1"
 mksecret eventide-payment \
-  --from-literal=DATABASE_URL="postgres://payment_svc:payment_svc@${DB_HOST_INCLUSTER}:5432/payment_db" \
-  --from-literal=INTERNAL_SERVICE_TOKEN="$INTERNAL_SERVICE_TOKEN"
+  --from-literal=STRIPE_SECRET_KEY="" \
+  --from-literal=STRIPE_WEBHOOK_SECRET=""
+mksecret eventide-mail-worker \
+  --from-literal=GMAIL_USER="" \
+  --from-literal=GMAIL_APP_PASSWORD="" \
+  --from-literal=MAIL_FROM=""
 
 # --- deploy the chart (same chart as EKS, values-local overlay) -------
-echo "== helm upgrade --install eventide =="
+echo "== helm upgrade --install eventide (db-migrate hook runs first) =="
 helm upgrade --install eventide infra/helm/eventide \
   -f infra/helm/eventide/values.yaml \
   -f infra/helm/eventide/values.local.yaml \
   --set imageRegistry="${REG_INCLUSTER}" \
+  --set dbMigrate.image.tag="$TAG" \
   $(for s in $SERVICES; do echo --set services.$s.image.tag=$TAG; done) \
-  --wait --timeout 180s
+  --wait --timeout 300s
 
 echo
 echo "deployed to k3d. smoke test (same paths as the NLB GATE on EKS):"
-echo "  curl -s http://localhost:8080/health/live                 # {\"status\":\"ok\",\"service\":\"event\"}"
-echo "  curl -s http://localhost:8080/api/events | jq length      # seeded events (run: make seed)"
-echo "  curl -s http://localhost:8080/api/auth/jwks               # EdDSA public key"
-echo "  open  http://localhost:8080/swagger"
+for p in auth events regis payment; do echo "  curl -s http://localhost:8080/api/$p/health   # โอเค"; done
+echo "  open  http://localhost:8080"
+echo "  make admin EMAIL=<registered email>          # first admin"

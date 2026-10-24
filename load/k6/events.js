@@ -13,9 +13,9 @@
 //
 // `make load BASE_URL=...` wraps this.
 //
-// Tuning: `event` is a hello-world returning `[]`, so it is cheap per request.
-// If replicas don't move, raise the VU targets or drop the event CPU `request`
-// in infra/k8s/event.yaml (a smaller request = the same load is a higher %).
+// Tuning: if replicas don't move, raise the VU targets or drop the event CPU
+// `request` in infra/helm/eventide/values.yaml (a smaller request = the same
+// load is a higher %).
 
 import http from "k6/http";
 import { check, sleep } from "k6";

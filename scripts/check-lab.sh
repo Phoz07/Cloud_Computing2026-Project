@@ -56,6 +56,14 @@ if [ -n "$NODEROLE" ]; then
     --query 'AttachedPolicies[].PolicyName' --output text
 fi
 
+p "SQS  (decides the mail queue: real SQS vs an ElasticMQ pod — 10-foundation/sqs.tf)"
+aws sqs list-queues --output text 2>&1 | tail -2
+
+p "S3 account-level Public Access Block  (decides /files via the public/* bucket policy — s3.tf)"
+aws s3control get-public-access-block \
+  --account-id "$(aws sts get-caller-identity --query Account --output text)" 2>&1 | tail -3
+echo "NoSuchPublicAccessBlockConfiguration = no account-level block = the public/* policy will apply."
+
 p "Route 53 / ACM / CloudFront  (UNVERIFIED — decides the whole TLS design)"
 echo "--- route53 ---";    aws route53 list-hosted-zones --query 'HostedZones[].Name' --output text 2>&1 | tail -2
 echo "--- acm ---";        aws acm list-certificates --region us-east-1 --query 'CertificateSummaryList[].DomainName' --output text 2>&1 | tail -2
