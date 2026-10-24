@@ -1,5 +1,6 @@
 {{- $root := . -}}
 {{- range $name, $svc := .Values.services }}
+{{- if $svc.port }}
 ---
 apiVersion: v1
 kind: Service
@@ -13,6 +14,7 @@ spec:
     app.kubernetes.io/name: {{ $name }}
   ports:
     - name: http
-      port: 80
+      port: {{ $svc.servicePort | default 80 }}
       targetPort: http
+{{- end }}
 {{- end }}

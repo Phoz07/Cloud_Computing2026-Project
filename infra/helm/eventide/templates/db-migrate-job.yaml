@@ -1,0 +1,53 @@
+{{- if .Values.dbMigrate.enabled }}
+{{- $root := . -}}
+# One-shot: `drizzle-kit migrate` against DATABASE_URL (the single eventide
+# database). Runs as a pre-install/pre-upgrade hook, so every `helm upgrade`
+# migrates BEFORE the new pods roll (readiness does not check the DB, so a
+# post-hook would let pods serve 500s until the tables land). Idempotent:
+# drizzle-kit records applied migrations in __drizzle_migrations.
+#
+# Requires: the eventide/db-bootstrap image pushed to the registry, and the
+# {{ .Values.commonSecretName }} Secret present (scripts create it first).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/part-of: eventide
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: db-migrate
+        app.kubernetes.io/part-of: eventide
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000 # oven/bun images' `bun` user — numeric for runAsNonRoot
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: migrate
+          image: {{ include "eventide.image" (dict "svc" (dict "image" $root.Values.dbMigrate.image) "root" $root) }}
+          imagePullPolicy: {{ $root.Values.imagePullPolicy }}
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $root.Values.commonSecretName }}
+                  key: DATABASE_URL
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false # drizzle-kit writes a temp dir
+            capabilities: { drop: ["ALL"] }
+{{- end }}

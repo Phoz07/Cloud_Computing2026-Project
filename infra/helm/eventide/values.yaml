@@ -3,52 +3,76 @@
 
 namespace: eventide
 
-# Public origin of the deployed system — the JWT `iss`/`aud` and better-auth's
-# BETTER_AUTH_URL. On k3d it is the k3d loadbalancer; on EKS the custom domain.
+# Public origin of the deployed system — Better Auth's BETTER_AUTH_URL (cookies,
+# OAuth callbacks). On k3d it is the k3d loadbalancer; on EKS the custom domain.
 publicUrl: http://localhost:8080
 
-# Prepended to every image repository. "" keeps the bare repo (the k3d in-cluster
-# registry rewrites it); on EKS this is the ECR registry host.
+# Prepended to every non-external image repository. "" keeps the bare repo (the k3d
+# in-cluster registry rewrites it); on EKS this is the ECR registry host.
 imageRegistry: ""
 imagePullPolicy: IfNotPresent
 
-# NODE_ENV for the app containers. "production" turns on the env.ts guards that
-# refuse to boot without the injected secrets.
+# NODE_ENV for the app containers.
 nodeEnv: production
 
 ingress:
   className: nginx
   # "" = match any host (k3d). On EKS set the custom domain.
   host: ""
+  # Uploads go through the services as multipart (packages/storage): avatar 2 MiB,
+  # event cover 5 MiB, event asset 10 MiB. ingress-nginx's default is 1m.
+  proxyBodySize: 20m
 
-# External Secrets Operator. false → the eventide-<svc> Secrets are expected to
-# already exist (scripts create them from a local file / terraform output).
+# One Secret every app pod gets (scripts/deploy.sh on EKS, scripts/k3d-up.sh on
+# k3d create it): DATABASE_URL, S3_BUCKET, S3_REGION, AWS_REGION, AWS_ACCESS_KEY_ID,
+# AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, MAIL_QUEUE_URL — plus S3_ENDPOINT,
+# S3_FORCE_PATH_STYLE, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, SQS_ENDPOINT on k3d
+# (MinIO / ElasticMQ on the host). The app only ever reads process.env.
+commonSecretName: eventide-common
+
+# Non-secret env every app pod gets. Templated against .Values.
+commonEnv:
+  # @app/auth-guard's 60 s session cache + revoked markers (the redis service below).
+  REDIS_URL: "redis://redis.{{ .Values.namespace }}.svc.cluster.local:6379"
+  # Where the other services ask "who is this cookie?" — in-cluster, not the public origin.
+  AUTH_SERVICE_URL: "http://auth.{{ .Values.namespace }}.svc.cluster.local"
+  BETTER_AUTH_URL: "{{ .Values.publicUrl }}"
+  # postgres.js pool per process (packages/db). db.t3.micro allows ~87 connections;
+  # 13 pods under the HPA × 4 = 52.
+  DB_POOL_MAX: "4"
+
+# /files/<key> -> <protocol>://<host>:<port>/<bucket>/<key>, straight from
+# ingress-nginx (templates/files.yaml). The browser never learns the bucket.
+# Only public/* is readable — the bucket policy decides that, not the ingress.
+files:
+  host: host.k3d.internal      # EKS: s3.us-east-1.amazonaws.com
+  port: 9000                   # EKS: 443
+  protocol: HTTP               # EKS: HTTPS
+  bucket: event-assets         # EKS: the uploads bucket (deploy.sh --set files.bucket=)
+
+# pre-install/pre-upgrade hook Job: `drizzle-kit migrate` against DATABASE_URL from
+# commonSecretName, so every deploy migrates BEFORE the new pods roll.
+dbMigrate:
+  enabled: true
+  image:
+    repository: eventide/db-bootstrap   # ECR repo name kept from v1 (packages/db/Dockerfile)
+    tag: latest
+
+# External Secrets Operator — OFF in the lab (no IRSA, node role can't read Secrets
+# Manager; SYSTEM-DESIGN §5.2.1). Templates stay behind this toggle for a non-lab env.
 eso:
   enabled: false
-  # A ClusterSecretStore this chart also renders when eso.enabled.
   createClusterSecretStore: true
   storeName: eventide-secretstore
   region: us-east-1
-  # ServiceAccount the store authenticates as. Empty → default (node role via
-  # IMDS — IRSA is unavailable in the lab, SYSTEM-DESIGN §5.3).
   serviceAccount: ""
   refreshInterval: 1h
   # Secrets Manager secret name -> k8s Secret name. Keys are copied verbatim.
   secrets:
+    eventide-common: eventide/common
     eventide-auth: eventide/auth
-    eventide-event: eventide/event
-    eventide-registration: eventide/registration
-    eventide-payment: eventide/payment
-    eventide-rds-master: eventide/rds-master
-
-# One-shot Job: create the 3 databases + roles on RDS, run migrations. Disabled
-# by default — run it explicitly after the DB exists.
-dbBootstrap:
-  enabled: false
-  image:
-    repository: eventide/db-bootstrap
-    tag: latest
-  masterSecretName: eventide-rds-master
+    eventide-payment: eventide/stripe
+    eventide-mail-worker: eventide/gmail
 
 defaults:
   replicas: 2
@@ -59,39 +83,24 @@ defaults:
   runAsUser: 65532
   readOnlyRootFs: true
 
+# Per service: `port` → Service + Ingress paths + probes; no `port` → Deployment only.
+# `livePath`/`readyPath` default to /health/live|ready; every v2 service answers
+# GET /api/<prefix>/health (touches nothing — the liveness rule in CLAUDE.md).
 services:
   auth:
     port: 3000
-    # /api/admin/{users,organizers,audit-logs} are auth's; /api/admin/events is
-    # event's — ingress-nginx routes by longest-matching prefix, so the split works.
-    ingressPaths:
-      - /api/auth
-      - /api/users
-      - /api/admin/users
-      - /api/admin/organizers
-      - /api/admin/audit-logs
+    ingressPaths: [/api/auth]
+    livePath: /api/auth/health
+    readyPath: /api/auth/health
     image: { repository: eventide/auth, tag: latest }
-    secretName: eventide-auth
-    env:
-      BETTER_AUTH_URL: "{{ .Values.publicUrl }}"
+    secretName: eventide-auth            # BETTER_AUTH_SECRET, GOOGLE_CLIENT_ID/SECRET
 
   event:
     port: 3000
-    # /health and /swagger at the root are event's smoke-test surfaces.
-    ingressPaths:
-      - /api/events
-      - /api/categories
-      - /api/venues
-      - /api/ticket-types
-      - /api/organizer/events
-      - /api/admin/events
-      - /health
-      - /swagger
+    ingressPaths: [/api/events]
+    livePath: /api/events/health
+    readyPath: /api/events/health
     image: { repository: eventide/event, tag: latest }
-    secretName: eventide-event
-    env:
-      AUTH_JWKS_URL: "http://auth.{{ .Values.namespace }}.svc.cluster.local/api/auth/jwks"
-      AUTH_BASE_URL: "{{ .Values.publicUrl }}"
     hpa:
       enabled: false
       minReplicas: 2
@@ -100,35 +109,55 @@ services:
 
   registration:
     port: 3000
-    ingressPaths: ["/api/orders", "/api/tickets", "/api/check-ins"]
+    ingressPaths: [/api/regis]
+    livePath: /api/regis/health
+    readyPath: /api/regis/health
     image: { repository: eventide/registration, tag: latest }
-    secretName: eventide-registration
-    env:
-      AUTH_JWKS_URL: "http://auth.{{ .Values.namespace }}.svc.cluster.local/api/auth/jwks"
-      AUTH_BASE_URL: "{{ .Values.publicUrl }}"
-      EVENT_SERVICE_URL: "http://event.{{ .Values.namespace }}.svc.cluster.local"
-    expiry:
-      enabled: true
-      schedule: "* * * * *"
 
   payment:
     port: 3000
     replicas: 1
-    ingressPaths: ["/api/payments"]
+    ingressPaths: [/api/payment]
+    livePath: /api/payment/health
+    readyPath: /api/payment/health
     image: { repository: eventide/payment, tag: latest }
-    secretName: eventide-payment
-    env:
-      AUTH_JWKS_URL: "http://auth.{{ .Values.namespace }}.svc.cluster.local/api/auth/jwks"
-      AUTH_BASE_URL: "{{ .Values.publicUrl }}"
-      REGISTRATION_SERVICE_URL: "http://registration.{{ .Values.namespace }}.svc.cluster.local"
+    secretName: eventide-payment         # STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET ("" = payment off)
+
+  # SQS consumer, no HTTP: Deployment only (no Service, Ingress or probes).
+  mail-worker:
+    replicas: 1
+    image: { repository: eventide/mail-worker, tag: latest }
+    secretName: eventide-mail-worker     # GMAIL_USER, GMAIL_APP_PASSWORD, MAIL_FROM ("" = dry-run)
+    resources:
+      requests: { cpu: 10m, memory: 48Mi }
+      limits: { cpu: 100m, memory: 128Mi }
+
+  # 60 s session cache + revoked markers for @app/auth-guard. No persistence on
+  # purpose: losing it means one slow request (fall through to auth), never a wrong one.
+  # ponytail: ElastiCache + a REDIS_URL override in values.aws.yaml if it ever matters.
+  redis:
+    port: 6379
+    servicePort: 6379
+    replicas: 1
+    tcpProbe: true
+    noCommonEnv: true
+    runAsUser: 999                       # the redis user in the official image
+    readOnlyRootFs: false
+    image: { repository: redis, tag: 8-alpine, external: true }
+    args: ["--save", "", "--appendonly", "no"]
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+      limits: { cpu: 100m, memory: 96Mi }
 
   # Static React SPA on nginx-unprivileged (uid 101, :8080). Catches every path
   # the API rules don't — one origin, no CORS, no CloudFront (denied in the lab).
   web:
     port: 8080
+    servicePort: 80
     replicas: 1
     runAsUser: 101
     readOnlyRootFs: false # nginx writes /var/cache/nginx, /var/run
+    noCommonEnv: true
     ingressPaths: ["/"]
     image: { repository: eventide/web, tag: latest }
     livePath: /
