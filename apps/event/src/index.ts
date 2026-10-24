@@ -1,9 +1,7 @@
-import { Elysia } from 'elysia'
+import { event } from "./app";
 
-export const event = new Elysia({ prefix: "/api/events" })
-    .get('/health', () => 'โอเค')
-
-export type Event = typeof event;
+export { event };
+export type { Event } from "./app";
 
 if (import.meta.main) {
   const port = Number(process.env.PORT ?? 3002);
