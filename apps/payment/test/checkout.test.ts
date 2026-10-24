@@ -13,12 +13,32 @@ const sessionsCreate = mock(async (_params: Stripe.Checkout.SessionCreateParams)
   const id = `cs_test_${crypto.randomUUID()}`;
   return { id, url: `https://checkout.stripe.test/${id}` };
 });
+// what Stripe says about a session when asked; one not listed is still open
+const sessionStates = new Map<string, Partial<Stripe.Checkout.Session>>();
+const sessionsRetrieve = mock(async (id: string) => ({
+  id,
+  object: "checkout.session",
+  status: "open",
+  payment_status: "unpaid",
+  payment_intent: null,
+  ...sessionStates.get(id),
+}));
 const refundsCreate = mock(async (_params: Stripe.RefundCreateParams, _options?: unknown) => ({
   id: `re_test_${crypto.randomUUID()}`,
   status: "succeeded",
 }));
+// no refund made yet by an earlier attempt
+const refundsList = mock(async () => ({ data: [] }));
+// how every payment was made
+let paidWith = "card";
+const chargesList = mock(async () => ({ data: [{ payment_method_details: { type: paidWith } }] }));
 mock.module("../src/libs/stripe", () => ({
-  stripe: { checkout: { sessions: { create: sessionsCreate } }, refunds: { create: refundsCreate }, webhooks: realStripe.webhooks },
+  stripe: {
+    checkout: { sessions: { create: sessionsCreate, retrieve: sessionsRetrieve } },
+    charges: { list: chargesList },
+    refunds: { create: refundsCreate, list: refundsList },
+    webhooks: realStripe.webhooks,
+  },
   webhookSecret: SECRET,
 }));
 
@@ -52,14 +72,16 @@ async function seedUser(name: string, role: Role) {
   });
 }
 
-const checkout = (enrollmentId: string, as = "buyer") =>
+const buyerPost = (path: string) => (enrollmentId: string, as = "buyer") =>
   app.handle(
-    new Request("http://localhost/api/payment/checkout", {
+    new Request(`http://localhost/api/payment${path}`, {
       method: "POST",
       headers: { cookie: as, "content-type": "application/json" },
       body: JSON.stringify({ enrollmentId }),
     }),
   );
+const checkout = buyerPost("/checkout");
+const verify = buyerPost("/checkout/verify");
 
 async function webhook(type: string, session: Record<string, unknown>, secret = SECRET) {
   const payload = JSON.stringify({ id: `evt_${crypto.randomUUID()}`, object: "event", type, data: { object: session } });
@@ -144,8 +166,10 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
+  paidWith = "card";
   enqueueMail.mockClear();
   sessionsCreate.mockClear();
+  sessionsRetrieve.mockClear();
   refundsCreate.mockClear();
 });
 
@@ -192,6 +216,57 @@ describe("checkout", () => {
     const expiresAt = sessionsCreate.mock.calls[0]![0].expires_at! * 1000;
     expect(expiresAt).toBeLessThanOrEqual(Date.now() + 24 * 3_600_000);
     expect(expiresAt).toBeGreaterThan(Date.now() + 23 * 3_600_000);
+  });
+});
+
+describe("verify", () => {
+  test("settles a paid session the webhook missed, once", async () => {
+    const id = await enrollment(await ticketType());
+    await checkout(id);
+    const { stripeSessionId } = await paymentOf(id);
+    expect(await json(await verify(id))).toEqual({ status: "awaiting_payment" });
+
+    sessionStates.set(stripeSessionId, { status: "complete", payment_status: "paid", payment_intent: "pi_test" });
+    expect((await verify(id, "other")).status).toBe(404);
+    expect(await statusOf(id)).toBe("awaiting_payment");
+    expect(await json(await verify(id))).toEqual({ status: "confirmed" });
+    expect(await paymentOf(id)).toMatchObject({ status: "paid", stripePaymentIntentId: "pi_test" });
+    expect(enqueueMail).toHaveBeenCalledTimes(2);
+
+    // the webhook arrives after all, and the buyer checks again: nothing more happens
+    enqueueMail.mockClear();
+    sessionsRetrieve.mockClear();
+    await paid(stripeSessionId);
+    expect(await json(await verify(id))).toEqual({ status: "confirmed" });
+    expect(sessionsRetrieve).not.toHaveBeenCalled();
+    expect(enqueueMail).not.toHaveBeenCalled();
+  });
+
+  test("an expired session ends the seat hold", async () => {
+    const id = await enrollment(await ticketType());
+    await checkout(id);
+    sessionStates.set((await paymentOf(id)).stripeSessionId, { status: "expired" });
+    expect(await json(await verify(id))).toEqual({ status: "expired" });
+    expect((await paymentOf(id)).status).toBe("expired");
+  });
+
+  test("checkout settles a paid session instead of sending the buyer back to it", async () => {
+    const id = await enrollment(await ticketType());
+    await checkout(id);
+    sessionStates.set((await paymentOf(id)).stripeSessionId, { status: "complete", payment_status: "paid", payment_intent: "pi_test" });
+    expect((await json(await checkout(id))).code).toBe("ALREADY_PAID");
+    expect(await statusOf(id)).toBe("confirmed");
+    expect(sessionsCreate).toHaveBeenCalledTimes(1);
+  });
+
+  test("Stripe being down is a 503", async () => {
+    const id = await enrollment(await ticketType());
+    await checkout(id);
+    sessionsRetrieve.mockImplementationOnce(async () => {
+      throw new Error("Stripe is down");
+    });
+    expect((await json(await verify(id))).code).toBe("PAYMENT_UNAVAILABLE");
+    expect(await statusOf(id)).toBe("awaiting_payment");
   });
 });
 
@@ -256,10 +331,29 @@ describe("webhook", () => {
     expect(await statusOf(late)).toBe("expired");
     const payment = await paymentOf(late);
     expect(payment.status).toBe("refunded");
-    expect(refundsCreate.mock.calls[0]![1]).toEqual({ idempotencyKey: `refund-${payment.id}` });
     const [refund] = await db.select().from(refunds).where(eq(refunds.paymentId, payment.id));
     expect(refund).toMatchObject({ amount: "600.00", percent: 100, initiatedBy: "system", note: "unavailable", status: "succeeded" });
     expect(enqueueMail.mock.calls.map(([m]) => m.to)).toEqual([emailOf("buyer")]);
+  });
+
+  test("a late PromptPay payment is refunded by hand: the buyer is mailed how to claim it", async () => {
+    paidWith = "promptpay";
+    const type = await ticketType("first_come", 2);
+    const late = await enrollment(type);
+    await checkout(late);
+    await db.update(enrollments).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(enrollments.id, late));
+    await enrollment(type, { status: "confirmed" });
+
+    expect((await paid((await paymentOf(late)).stripeSessionId)).status).toBe(200);
+    expect(refundsCreate).not.toHaveBeenCalled();
+    expect(await statusOf(late)).toBe("expired");
+    const payment = await paymentOf(late);
+    expect(payment.status).toBe("refunded");
+    const [refund] = await db.select().from(refunds).where(eq(refunds.paymentId, payment.id));
+    expect(refund).toMatchObject({ amount: "600.00", initiatedBy: "system", status: "requires_action", stripeRefundId: null });
+    const [mail] = enqueueMail.mock.calls.map(([m]) => m);
+    expect(mail).toMatchObject({ to: emailOf("buyer"), subject: expect.stringContaining("วิธีรับเงินคืน") });
+    expect(mail!.html).toContain(`เลขคำสั่งซื้อ: <strong>${late}</strong>`);
   });
 
   test("a payment for an order cancelled meanwhile is refunded, and the order stays cancelled", async () => {

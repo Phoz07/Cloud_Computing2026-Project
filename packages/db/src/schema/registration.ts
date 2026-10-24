@@ -128,13 +128,14 @@ export const payments = pgTable(
   (table) => [index("payments_enrollment_id_idx").on(table.enrollmentId)],
 );
 
-// Stripe's refund statuses; requires_action: Stripe asked the buyer where to send the money (e.g. PromptPay)
+// Stripe's refund statuses; requires_action: waiting for the buyer to tell us where to send the
+// money (a refund made by hand, see refunds.stripe_refund_id)
 export const refundStatus = pgEnum("refund_status", ["pending", "requires_action", "succeeded", "failed", "canceled"]);
 
 // system: a payment that landed after its hold lapsed, or a second payment for one enrollment
 export const refundInitiator = pgEnum("refund_initiator", ["buyer", "organizer", "system"]);
 
-// A Stripe refund of a paid payment, at most one per payment. Owned by apps/payment.
+// A refund of a paid payment, at most one per payment. Owned by apps/payment.
 export const refunds = pgTable(
   "refunds",
   {
@@ -151,7 +152,9 @@ export const refunds = pgTable(
     requestedBy: uuid("requested_by").references(() => users.id, { onDelete: "set null" }),
     // the organizer's message to the buyer, or the system's reason (duplicate, unavailable)
     note: text("note"),
-    stripeRefundId: text("stripe_refund_id").notNull().unique(),
+    // null: made by hand, for a payment Stripe can't refund by itself (anything but a card, e.g.
+    // PromptPay); the buyer was mailed how to claim it
+    stripeRefundId: text("stripe_refund_id").unique(),
     failureReason: text("failure_reason"),
     ...timestamps,
   },

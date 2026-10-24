@@ -9,7 +9,7 @@ type BadgeVariant = "secondary" | "default" | "outline" | "destructive";
 
 export const refundStatusInfo: Record<RefundStatus, { label: string; icon: LucideIcon; variant: BadgeVariant }> = {
   pending: { label: "กำลังคืนเงิน", icon: Hourglass, variant: "secondary" },
-  // Stripe asked the buyer for a bank account (e.g. PromptPay)
+  // made by hand (not a card payment, e.g. PromptPay): the buyer was mailed how to send us a bank account
   requires_action: { label: "รอข้อมูลบัญชี", icon: Landmark, variant: "outline" },
   succeeded: { label: "คืนเงินแล้ว", icon: CircleCheckBig, variant: "default" },
   failed: { label: "คืนเงินไม่สำเร็จ", icon: CircleX, variant: "destructive" },

@@ -6,16 +6,31 @@ import Stripe from "stripe";
 const enqueueMail = mock(async (_message: MailMessage) => {});
 mock.module("@app/mail", () => ({ enqueueMail }));
 
-// Stripe stand-in: refunds are recorded and answer with `nextStatus`; webhook signing is the real thing.
+// Stripe stand-in: payments were made with `paidWith`; refunds are kept (refunds.list reads them
+// back) and answer with `nextStatus`; webhook signing is the real thing.
 const SECRET = "whsec_test_secret";
 const realStripe = new Stripe("sk_test_placeholder");
+let paidWith = "card";
 let nextStatus = "succeeded";
-const refundsCreate = mock(async (_params: Stripe.RefundCreateParams, _options?: unknown): Promise<Partial<Stripe.Refund>> => ({
-  id: `re_test_${crypto.randomUUID()}`,
-  status: nextStatus,
+const chargesList = mock(async (_params: Stripe.ChargeListParams) => ({
+  data: [{ payment_method_details: { type: paidWith } }],
+}));
+const stripeRefunds: Partial<Stripe.Refund>[] = [];
+const refundsCreate = mock(async (params: Stripe.RefundCreateParams, _options?: unknown): Promise<Partial<Stripe.Refund>> => {
+  const refund = {
+    id: `re_test_${crypto.randomUUID()}`,
+    status: nextStatus,
+    payment_intent: params.payment_intent!,
+    metadata: params.metadata as Stripe.Metadata,
+  };
+  stripeRefunds.push(refund);
+  return refund;
+});
+const refundsList = mock(async (params: Stripe.RefundListParams) => ({
+  data: stripeRefunds.filter((refund) => refund.payment_intent === params.payment_intent),
 }));
 mock.module("../src/libs/stripe", () => ({
-  stripe: { refunds: { create: refundsCreate }, webhooks: realStripe.webhooks },
+  stripe: { charges: { list: chargesList }, refunds: { create: refundsCreate, list: refundsList }, webhooks: realStripe.webhooks },
   webhookSecret: SECRET,
 }));
 
@@ -179,6 +194,7 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
+  paidWith = "card";
   nextStatus = "succeeded";
   enqueueMail.mockClear();
   refundsCreate.mockClear();
@@ -207,7 +223,6 @@ describe("buyer refunds", () => {
     expect(await json(response)).toMatchObject({ enrollmentId: id, amount: 300, percent: 50, status: "succeeded", initiatedBy: "buyer" });
     expect(refundsCreate).toHaveBeenCalledTimes(1);
     expect(refundsCreate.mock.calls[0]![0]).toMatchObject({ amount: 30_000, metadata: { paymentId } });
-    expect(refundsCreate.mock.calls[0]![1]).toEqual({ idempotencyKey: `refund-${paymentId}` });
 
     expect(await enrollmentOf(id)).toMatchObject({ status: "cancelled", cancelledAt: expect.any(Date) });
     expect((await paymentOf(paymentId!)).status).toBe("refunded");
@@ -271,6 +286,43 @@ describe("buyer refunds", () => {
     expect((await paymentOf(paymentId!)).status).toBe("paid");
     expect(await refundsOf(id)).toEqual([]);
     expect(enqueueMail).not.toHaveBeenCalled();
+
+    // a refusal isn't replayed: once its cause is fixed, asking again refunds
+    expect((await buyerRefund(id)).status).toBe(200);
+    expect(refundsCreate).toHaveBeenCalledTimes(3);
+  });
+
+  test("a refund Stripe made but we didn't record is recorded on the retry, not made twice", async () => {
+    const type = await ticketType();
+    const { id, paymentId } = await order(type);
+    const [payment] = await db.select().from(payments).where(eq(payments.id, paymentId!));
+    // Stripe said yes, then the transaction rolled back
+    const earlier = await refundsCreate({ payment_intent: payment!.stripePaymentIntentId!, amount: 30_000, metadata: { paymentId: paymentId! } });
+    refundsCreate.mockClear();
+
+    expect((await buyerRefund(id)).status).toBe(200);
+    expect(refundsCreate).not.toHaveBeenCalled();
+    expect(await refundsOf(id)).toMatchObject([{ stripeRefundId: earlier.id }]);
+  });
+
+  test("not paid by card: refunded by hand, and the buyer is mailed how to claim it", async () => {
+    paidWith = "promptpay";
+    const type = await ticketType();
+    const { id, paymentId } = await order(type);
+
+    const response = await buyerRefund(id);
+    expect(response.status).toBe(200);
+    expect(await json(response)).toMatchObject({ amount: 300, percent: 50, status: "requires_action" });
+    expect(refundsCreate).not.toHaveBeenCalled();
+    expect(await refundsOf(id)).toMatchObject([{ status: "requires_action", stripeRefundId: null }]);
+    expect((await paymentOf(paymentId!)).status).toBe("refunded");
+    expect((await enrollmentOf(id)).status).toBe("cancelled");
+    expect(await seatsTaken(db, type.ticketTypeId)).toBe(0);
+
+    const toBuyer = enqueueMail.mock.calls.find(([m]) => m.to === emailOf("buyer"))![0];
+    expect(toBuyer.subject).toContain("วิธีรับเงินคืน");
+    expect(toBuyer.html).toContain(`เลขคำสั่งซื้อ: <strong>${id}</strong>`);
+    expect(toBuyer.html).toContain("refunds@eventide.example");
   });
 });
 
@@ -299,12 +351,11 @@ describe("organizer refunds", () => {
 
 describe("refund webhooks", () => {
   test("move the status along; a failure is final and mailed once", async () => {
-    nextStatus = "requires_action";
+    nextStatus = "pending";
     const { id, paymentId } = await order(await ticketType());
-    expect((await json(await buyerRefund(id))).status).toBe("requires_action");
-    // PromptPay: Stripe asks the buyer for a bank account
-    expect(enqueueMail.mock.calls.find(([m]) => m.to === emailOf("buyer"))![0].html).toContain("เลขบัญชี");
-    const [{ stripeRefundId }] = (await refundsOf(id)) as [{ stripeRefundId: string }];
+    expect((await json(await buyerRefund(id))).status).toBe("pending");
+    expect(enqueueMail.mock.calls.find(([m]) => m.to === emailOf("buyer"))![0].html).toContain("5–10 วันทำการ");
+    const stripeRefundId = (await refundsOf(id))[0]!.stripeRefundId!;
     const event = (status: string, extra: Record<string, unknown> = {}) => ({
       id: stripeRefundId,
       object: "refund",
@@ -313,8 +364,8 @@ describe("refund webhooks", () => {
       ...extra,
     });
 
-    await webhook("refund.updated", event("pending"));
-    expect((await refundsOf(id))[0]!.status).toBe("pending");
+    await webhook("refund.updated", event("succeeded"));
+    expect((await refundsOf(id))[0]!.status).toBe("succeeded");
 
     enqueueMail.mockClear();
     await webhook("refund.failed", event("failed", { failure_reason: "lost_or_stolen_card" }));

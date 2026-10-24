@@ -200,8 +200,9 @@ sequenceDiagram
 ```
 
 - **ไม่จ่ายซ้ำ:** checkout ล็อกแถวการลงทะเบียน และถ้ามี session ที่ยังเปิดอยู่จะคืน URL เดิม
+- **Webhook ไม่มาถึง:** ปุ่ม "ตรวจสอบการชำระเงิน" ในหน้ารายการสั่งซื้อเรียก `POST /api/payment/checkout/verify` ซึ่งถาม Stripe (`checkout.sessions.retrieve`) ถึง session ที่ยัง `pending` ของรายการนั้น แล้วจัดการแบบเดียวกับ webhook (`src/libs/settle.ts`) ใครถึงก่อนได้ทำ อีกฝั่งไม่มีผล `POST /checkout` ก็ตรวจแบบนี้ก่อนเสมอ จึงไม่พาผู้ซื้อกลับไปที่ session ที่จ่ายแล้ว (หน้า "You're all done here" ของ Stripe)
 - **Webhook ซ้ำไม่มีผล:** การเปลี่ยน `payments.status` จาก `pending` เป็น `paid` เป็นเงื่อนไขใน `UPDATE … WHERE status = 'pending'` ใครได้แถวไปคนแรกเท่านั้นที่ทำต่อ ถ้าขั้นต่อไปพัง จะคืนสถานะเป็น `pending` แล้วโยน error ให้ Stripe ส่งใหม่
-- **เงินเข้าหลังหมดเวลาจอง:** ถ้าที่นั่ง (หรือคำเชิญ) ถูกคนอื่นใช้ไปแล้ว จะคืนเงินเต็มจำนวน (`stripe.refunds.create` พร้อม idempotency key) ตั้ง `refunded` และส่งอีเมลแจ้งผู้ซื้อ ตั๋ว approval ไม่มีที่นั่งให้แย่ง จึงยืนยันได้เสมอ
+- **เงินเข้าหลังหมดเวลาจอง:** ถ้าที่นั่ง (หรือคำเชิญ) ถูกคนอื่นใช้ไปแล้ว จะคืนเงินเต็มจำนวน (`issueRefund()`) ตั้ง `refunded` และส่งอีเมลแจ้งผู้ซื้อ (`mailSystemRefund()` ชำระซ้ำก็ได้อีเมลนี้) ตั๋ว approval ไม่มีที่นั่งให้แย่ง จึงยืนยันได้เสมอ
 - **Session หมดอายุ / ชำระไม่สำเร็จ:** first_come / invite ปล่อยที่นั่ง (`expired`), approval ยังรอชำระได้จนถึงกำหนด 72 ชม. และเริ่ม session ใหม่ได้
 - ช่องทางที่เงินเข้าช้า (เช่น โอนผ่านธนาคาร) จะได้ `completed` แบบ `unpaid` ก่อน ระบบรอ `async_payment_succeeded`
 
@@ -215,11 +216,17 @@ sequenceDiagram
 
   B->>P: POST /api/payment/refunds { enrollmentId }
   P->>P: ล็อกการลงทะเบียน แล้วตรวจนโยบายและกำหนดเวลา
-  P->>S: refunds.create (amount, idempotency key refund-<paymentId>)
-  S-->>P: refund (succeeded / pending / requires_action)
+  P->>S: charges.list (จ่ายด้วยบัตรหรือไม่)
+  alt บัตร
+    P->>S: refunds.list (refund ของรอบก่อนที่ยังไม่ได้บันทึก)
+    P->>S: refunds.create (amount) ถ้าไม่มี
+    S-->>P: refund (succeeded / pending)
+  else อื่นๆ เช่น PromptPay
+    P->>P: คืนเงินเอง: refund สถานะ requires_action ไม่มี stripe_refund_id
+  end
   P->>P: บันทึก refunds, payments → refunded, การลงทะเบียน → cancelled
   P-->>B: refund
-  P->>P: อีเมลถึงผู้ซื้อและผู้เข้าร่วม
+  P->>P: อีเมลถึงผู้ซื้อ (คืนเงินเอง: วิธีรับเงินคืน) และผู้เข้าร่วม
   S->>P: webhook refund.updated / refund.failed (ภายหลัง)
 ```
 
@@ -230,10 +237,13 @@ sequenceDiagram
   - `refundTerms()` ใน `@app/tickets` คำนวณเงื่อนไขนี้ที่เดียว registration ใช้แสดง (`Enrollment.refundTerms`) payment ใช้ตรวจ
 - **ผู้จัดงานหรือ admin** (`POST /api/payment/enrollments/:id/refund`): คืน 100% เมื่อไรก็ได้โดยไม่ดูนโยบาย ใส่ข้อความถึงผู้ซื้อได้ (ไม่บังคับ) อีเวนต์ที่ถูกระงับ ผู้จัดคืนไม่ได้ แต่ admin คืนได้
 - **ยอดเงิน:** คิดเป็นสตางค์ `round(สตางค์ที่จ่าย × percent / 100)` แล้วส่งเป็น `amount` ให้ Stripe
-- **ไม่คืนซ้ำ:** ล็อกแถวการลงทะเบียนตั้งแต่ตรวจจนเรียก Stripe เสร็จ และใช้ idempotency key `refund-<paymentId>` ตัวเดียวกับการคืนเงินอัตโนมัติ ถ้า DB พังหลัง Stripe คืนเงินแล้ว การกดใหม่ภายใน 24 ชั่วโมงจะได้ refund เดิมกลับมา
-- **สถานะเปลี่ยนภายหลัง:** Stripe คืนเงินแบบ async
-  - บัตร: มักได้ `succeeded` ทันที แต่อาจกลายเป็น `failed` ภายหลัง
-  - PromptPay: เริ่มที่ `requires_action` Stripe ส่งอีเมลขอเลขบัญชีจากผู้ซื้อ แล้วเป็น `pending` → `succeeded` หรือ `failed` ถ้าไม่ตอบภายใน 45 วัน
+- **ไม่คืนซ้ำ:** ล็อกแถวการลงทะเบียนตั้งแต่ตรวจจนเรียก Stripe เสร็จ และก่อนสร้าง refund จะถาม Stripe (`refunds.list`) ว่ามี refund ของ payment นี้ (`metadata.paymentId`) ที่ยังไม่ได้บันทึกหรือไม่ การคืนเงินอัตโนมัติก็ใช้ทางเดียวกัน ถ้า DB พังหลัง Stripe คืนเงินแล้ว การกดใหม่จะบันทึก refund เดิมแทนการคืนซ้ำ
+  - ไม่ใช้ idempotency key คงที่ (เช่น `refund-<paymentId>`) เพราะ Stripe จะตอบ error เดิมซ้ำให้คีย์นั้นนาน 24 ชั่วโมง แม้แก้ต้นเหตุแล้ว (เช่น ตั้งค่าบัญชี Stripe) การส่งซ้ำเพราะเครือข่ายยังปลอดภัย เพราะ SDK ใส่คีย์ของมันเองทุกครั้งที่ retry
+- **คืนผ่าน Stripe เฉพาะบัตร:** `issueRefund()` ถาม Stripe (`charges.list`) ว่าจ่ายด้วยอะไร ช่องทางอื่น (เช่น PromptPay) Stripe ต้องส่งอีเมลขอเลขบัญชีจากผู้ซื้อเอง ซึ่งบัญชีที่ยังไม่ยืนยันอีเมลหรือยังไม่ส่ง account application ทำไม่ได้ เราจึงคืนเงินเอง
+  - บันทึก refund สถานะ `requires_action` ("รอข้อมูลบัญชี") โดย `stripe_refund_id` เป็น null การลงทะเบียนยังถูกยกเลิกและปล่อยที่นั่งทันทีเหมือนบัตร
+  - อีเมลถึงผู้ซื้อบอกให้ติดต่อเราพร้อมเลขคำสั่งซื้อ (id ของการลงทะเบียน) และเลขบัญชีธนาคาร ช่องทางติดต่ออยู่ที่ `refundContacts` ใน `apps/payment/src/libs/mail.ts` (ตอนนี้เป็นค่าสมมติ) หน้ารายการของผู้ซื้อก็แสดงเลขคำสั่งซื้อนี้
+  - ยังไม่มีปุ่มให้ผู้ดูแลระบบตั้งว่าโอนคืนแล้ว สถานะจึงค้างที่ `requires_action`
+- **สถานะเปลี่ยนภายหลัง:** Stripe คืนเงินบัตรแบบ async มักได้ `succeeded` ทันที แต่อาจกลายเป็น `failed` ภายหลัง
   - webhook `refund.updated` / `refund.failed` อัปเดต `refunds.status` ตาม `stripe_refund_id` `failed` และ `canceled` เป็นสถานะสุดท้าย event เก่าที่มาช้าจะไม่ทำให้ย้อนกลับ ผู้ซื้อได้อีเมลเมื่อคืนเงินไม่สำเร็จครั้งเดียว
   - คืนไม่สำเร็จ: Stripe คืนเงินเข้า balance ของเรา ต้องคืนผู้ซื้อทางอื่น การลงทะเบียนยังเป็น `cancelled`
 - **การคืนเงินอัตโนมัติ** (เงินเข้าหลังหมดเวลาจอง หรือชำระซ้ำ) บันทึกลง `refunds` ด้วย `initiated_by = system` จึงอยู่ในประวัติเดียวกัน
@@ -262,7 +272,7 @@ sequenceDiagram
 | `GET /api/regis/events/:eventId/enrollments` | ผู้จัดหรือ admin (`eventOwner`) |
 | `POST /api/regis/enrollments/:id/approve`, `/reject` | ผู้จัดหรือ admin (`enrollmentManager`) |
 | `GET /api/regis/tickets/mine`, `/tickets/:id` | ผู้ใช้ที่เข้าสู่ระบบ (เฉพาะของตัวเอง) |
-| `POST /api/payment/checkout` | ผู้ซื้อของการลงทะเบียนนั้น |
+| `POST /api/payment/checkout`, `/checkout/verify` | ผู้ซื้อของการลงทะเบียนนั้น |
 | `POST /api/payment/refunds` | ผู้ซื้อของการลงทะเบียนนั้น (ตามนโยบาย) |
 | `POST /api/payment/enrollments/:id/refund` | ผู้จัดหรือ admin (`enrollmentManager`) คืนเต็มจำนวน |
 | `GET /api/payment/events/:eventId/refunds` | ผู้จัดหรือ admin (`eventOwner`) |
@@ -292,7 +302,7 @@ sequenceDiagram
 - `apps/registration/test/enrollment.test.ts`: ลงทะเบียนพร้อมกันไม่เกิน quota, `max_per_user`, คำเชิญ, อนุมัติ/ไม่อนุมัติ, ตรวจคำตอบ, ตั๋วของฉัน
 - `apps/registration/test/seat-hold.test.ts`: จองแล้วได้ hold เดิมเมื่อขอซ้ำ, ปรับจำนวน, ที่นั่งเต็มสำหรับคนอื่นแต่ยังเปิดสำหรับผู้จอง, หมดเวลา, ลงทะเบียนต่อจาก hold (ฟรี / มีราคา), `max_per_user`, จองพร้อมกันไม่เกิน quota
 - `apps/registration/test/live-seats.test.ts`: เปิด app บน port จริง (`listen(0)`) และรอให้ subscribe Redis ก่อน ครอบคลุมตัวเลขตอนต่อและหลังลงทะเบียน, การลงทะเบียนพร้อมกันที่รวมเป็นการนับไม่กี่ครั้ง, การจองที่หมดเวลา (ทั้งรอชำระและ seat hold), การประกาศจาก service อื่น และ close code เมื่อไม่มีสิทธิ์
-- `apps/payment/test/checkout.test.ts`: mock `src/libs/stripe` แต่เซ็น webhook จริงด้วย `generateTestHeaderStringAsync` ครอบคลุม session ซ้ำ, ลายเซ็นผิด, webhook ซ้ำ, หมดอายุ, และคืนเงินเมื่อเงินเข้าช้า
+- `apps/payment/test/checkout.test.ts`: mock `src/libs/stripe` แต่เซ็น webhook จริงด้วย `generateTestHeaderStringAsync` ครอบคลุม session ซ้ำ, ลายเซ็นผิด, webhook ซ้ำ, หมดอายุ, คืนเงินเมื่อเงินเข้าช้า, และตรวจสอบการชำระเงินกับ Stripe เมื่อ webhook ไม่มาถึง
 - `apps/payment/test/refund.test.ts`: ผู้ซื้อคืนตามนโยบาย (ยอด, กำหนดเวลา, นโยบาย ณ ตอนลงทะเบียน, ที่นั่งและคำเชิญที่ได้คืน), ผู้จัดคืนเต็มจำนวน, อีเวนต์ที่ถูกระงับ, Stripe ล่มหรือปฏิเสธ, webhook ของ refund, ประวัติของอีเวนต์
 - รันด้วย `bun run test` ในแต่ละ workspace (ต้อง `bun run infra:up`)
 - Dev: ตั้งค่า Stripe ตาม [docs/stripe.md](stripe.md) (สร้าง sandbox, restricted key, `bun run stripe:listen`, บัตรทดสอบ, การแก้ปัญหา)

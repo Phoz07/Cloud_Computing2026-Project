@@ -1,6 +1,7 @@
 import { and, db, desc, enrollments, eq, events, gt, payments, ticketTypes } from "@app/db";
 import { appUrl, effectiveStatus, EnrollmentClosed, EnrollmentNotFound } from "@app/tickets";
 import { HTTPError } from "elysia";
+import { settlePaid, settleUnpaid } from "../../libs/settle";
 import { stripe } from "../../libs/stripe";
 
 export class AlreadyPaid extends HTTPError.id("ALREADY_PAID", 409) {
@@ -30,6 +31,10 @@ const REUSE_MARGIN_MS = 2 * MINUTE;
  * A payment that still lands after its hold lapsed is checked again by the webhook.
  */
 export async function createCheckout(buyer: { id: string; email: string }, enrollmentId: string) {
+  // a session that ended but wasn't settled would be reused, and Stripe shows "You're all done here"
+  const synced = await syncPayments(buyer.id, enrollmentId);
+  if (synced) return synced;
+
   return db.transaction(async (tx) => {
     const [row] = await tx
       .select({
@@ -104,4 +109,44 @@ export async function createCheckout(buyer: { id: string; email: string }, enrol
     });
     return { url: session.url };
   });
+}
+
+/**
+ * The buyer's "check payment": settles what Stripe already knows about the enrollment's sessions,
+ * then answers its status.
+ */
+export async function verifyPayment(buyerId: string, enrollmentId: string) {
+  const synced = await syncPayments(buyerId, enrollmentId);
+  if (synced) return synced;
+
+  const [enrollment] = await db
+    .select({ buyerId: enrollments.buyerId, status: enrollments.status, expiresAt: enrollments.expiresAt })
+    .from(enrollments)
+    .where(eq(enrollments.id, enrollmentId));
+  if (!enrollment || enrollment.buyerId !== buyerId) return new EnrollmentNotFound();
+  return { status: effectiveStatus(enrollment) };
+}
+
+/**
+ * Asks Stripe how the buyer's pending sessions for the enrollment ended and settles them as the
+ * webhook would, for when its event never arrived (e.g. `stripe listen` wasn't running). Whichever
+ * comes first claims the payment; the other is a no-op. An open session stays pending, and so does
+ * one completed with a delayed method that hasn't paid yet (the webhook still settles that).
+ */
+async function syncPayments(buyerId: string, enrollmentId: string) {
+  const pending = await db
+    .select({ sessionId: payments.stripeSessionId })
+    .from(payments)
+    .innerJoin(enrollments, eq(enrollments.id, payments.enrollmentId))
+    .where(and(eq(payments.enrollmentId, enrollmentId), eq(enrollments.buyerId, buyerId), eq(payments.status, "pending")));
+  try {
+    for (const { sessionId } of pending) {
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      if (session.status === "complete" && session.payment_status === "paid") await settlePaid(session);
+      else if (session.status === "expired") await settleUnpaid(session);
+    }
+  } catch (error) {
+    console.error("Failed to sync a Stripe Checkout session", error);
+    return new PaymentUnavailable();
+  }
 }
