@@ -24,6 +24,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { eventQueryOptions, eventUrl, hasEnded, isLive, isScheduled, problemCode, statusInfo } from "@/lib/events";
 import { formatDateRange, formatDateTime, formatDuration } from "@/lib/format";
 import { hasRole, useSession } from "@/lib/session";
@@ -36,6 +37,7 @@ function EventPage() {
   const { slug } = Route.useParams();
   const { data: event, isPending, isError, error } = useQuery(eventQueryOptions(slug));
   const { data: session } = useSession();
+  usePageTitle(event?.title);
 
   if (isPending) {
     return (

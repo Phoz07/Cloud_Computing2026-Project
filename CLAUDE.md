@@ -46,6 +46,7 @@ bun run db:studio             # Drizzle Studio
 
 bun run --filter @app/web lint    # oxlint (web only, no lint config elsewhere)
 bun run --filter @app/web build   # tsc -b && vite build
+bun run --filter @app/web start   # production server for the built web (dist/ + per-URL Open Graph tags)
 ```
 
 **Type checking:** run `bun check` from **inside** a workspace (`cd apps/web && bun check`; `cd apps/event && bun check src/index.ts`). The root `bun run typecheck` reads the root tsconfig, which has no DOM lib and no `@/*` alias, so it reports false errors in `apps/web`.
@@ -71,13 +72,13 @@ bun run --filter @app/web build   # tsc -b && vite build
 
 ### Workspaces
 
-- `apps/web` (`@app/web`): Vite + React 19 SPA on :5173. Uses TanStack Router (file-based), TanStack Query and shadcn/ui.
+- `apps/web` (`@app/web`): Vite + React 19 SPA on :5173. Uses TanStack Router (file-based), TanStack Query and shadcn/ui. `server/` holds its production server and the per-URL `<head>` (see **Link previews** below).
 - One Elysia service per domain, each with its own process, port and path prefix:
 
   | Workspace | Port | Prefix | Owns |
   |---|---|---|---|
   | `apps/auth` | 3001 | `/api/auth` | Better Auth: accounts, sessions, roles, bans |
-  | `apps/event` | 3002 | `/api/events` | events (CRUD, slug, status, refund policy, HTML description, a Redis cache of the detail), categories (admin-only), cover + gallery, invitations (who may open an `invite`-status event, by email), ticket types and their registration forms (`ticket_types`, `ticket_type_questions`) |
+  | `apps/event` | 3002 | `/api/events` | events (CRUD, slug, status, refund policy, HTML description, a Redis cache of the detail, Open Graph images), categories (admin-only), cover + gallery, invitations (who may open an `invite`-status event, by email), ticket types and their registration forms (`ticket_types`, `ticket_type_questions`) |
   | `apps/registration` | 3003 | `/api/regis` | seat availability (plus a live WebSocket feed), enrollments (enroll, approve / reject), tickets ("my tickets"), check-in |
   | `apps/payment` | 3004 | `/api/payment` | Stripe Checkout for enrollments, the Stripe webhook, refunds (`payments`, `refunds`) |
 
@@ -195,6 +196,21 @@ test/<feature>.test.ts
   - It is called by create, update (including status, slug and suspension) and cover changes. A delete calls `forgetDeletedEvent()`, which leaves a `gone` marker on the id for one TTL. A category rename calls `forgetCategoryEvents()`, since entries embed the category.
   - Readers fill the cache only with `NX`, and refreshes don't overwrite `gone`, so a read or update that raced a write can't put an old copy back.
 - Redis failures fall through to Postgres: slower, never wrong.
+
+### Link previews (Open Graph)
+
+Crawlers (LINE, Facebook, X, Discord) read only the HTML and never run the SPA, so the server puts each URL's tags into it.
+
+- **Images** (`apps/event/src/routes/og`): `GET /api/events/og/site`, `/og/events/:id` (uuid or slug) and `/og/categories/:slug` return 1200×630 JPEGs. Takumi (`takumi-js`) renders the node trees in `cards.ts` with Google Sans (latin + thai woff2 from `@fontsource-variable/google-sans`).
+  - They read events as an anonymous viewer (`findVisibleEvent(id, null)`), so a draft, scheduled, invite-only or suspended event answers 404 like a missing one.
+  - Covers come from `readFile()` in `@app/storage`. Takumi skips bytes it can't decode, and a failed render is retried without images.
+  - Dates are formatted in `Asia/Bangkok` (`format.ts`), because the server's time zone is arbitrary.
+- **Tags** (`apps/web/server/head.ts`): `resolveHead()` builds the title, description, canonical link and `og:*` / `twitter:card` tags; `injectHead()` puts them between the `<!--head-->` and `<!--/head-->` markers in `index.html`.
+  - It reads the event service without a cookie (`EVENT_SERVICE_URL`), waits at most 1.5 s, and otherwise falls back to the site's card. Every value goes through `escapeHtml`, since titles are user input.
+  - Absolute URLs use `BETTER_AUTH_URL` as the public origin, like the links in mail.
+  - An event's image URL carries `?v=<updatedAt>`, so an edit gives crawlers a new URL. The images themselves are cached for a day (categories for an hour).
+  - Dev: the Vite plugin `server/head-plugin.ts` fills the block per request (and with the defaults at build time). Production: `bun run --filter @app/web start` (`server/index.ts`, port 3000) serves `dist/` and fills it per request. The reverse proxy sends `/api/*`, `/files/*` and the WebSocket to the services and the bucket, and everything else to it.
+  - The SPA keeps the tab title current with `usePageTitle()` (`src/hooks/use-page-title.ts`), which resets to "Eventide" when the page unmounts. Titles go through `pageTitle()` in `src/lib/site.ts`, which the server shares.
 
 ### Frontend: `apps/web`
 
