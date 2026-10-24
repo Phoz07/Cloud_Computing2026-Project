@@ -44,3 +44,6 @@ crash.log
 
 # claude code local settings
 .claude/settings.local.json
+
+# AWS session credentials (infra/aws.env.example is the template)
+infra/aws.env

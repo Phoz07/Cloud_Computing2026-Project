@@ -8,7 +8,7 @@
 #   make deploy  ->  docker build -> push to k3d registry -> helm upgrade  (this script, bottom half)
 #   make down    ->  k3d cluster delete                                (scripts/k3d-down.sh)
 #
-# ingress-nginx uses the same values file as 20-platform/addons.tf plus the k3d
+# ingress-nginx uses the same values file as infra/terraform/platform.tf plus the k3d
 # overlay. The APP is the same chart as EKS — only values-local vs values-aws and
 # the image registry differ. That is the whole point of the exercise.
 #

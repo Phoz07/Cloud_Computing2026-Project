@@ -163,9 +163,10 @@ packages/
   db/  auth-guard/  mail/  storage/  tickets/
 infra/
   elasticmq/      ค่าตั้งคิวของ ElasticMQ สำหรับ docker-compose
-  terraform/      00-bootstrap · 10-foundation (ECR, S3, SQS, secrets, DNS) · 20-platform (EKS, RDS, NLB)
+  terraform/      root เดียว: ECR, S3, SQS, secrets, DNS + modules/platform (EKS, RDS, NLB) สลับด้วย var.platform
+  aws.env.example ที่วาง credential ของ Learner Lab (copy เป็น aws.env)
   helm/eventide/  Helm chart ของทั้งระบบ (ใช้ชุดเดียวกันทั้ง k3d และ EKS)
-scripts/          deploy.sh · teardown.sh · k3d-up.sh · admin.sh · check-lab.sh
+scripts/          tf-init.sh · deploy.sh · teardown.sh · k3d-up.sh · admin.sh · check-lab.sh
 load/k6/          load test สำหรับ HPA
 docs/             เอกสารออกแบบ + รายงาน
 ```
@@ -188,11 +189,12 @@ docs/             เอกสารออกแบบ + รายงาน
 make k3d          # k3d + ingress-nginx + chart ทั้งระบบ (ใช้ Postgres/MinIO/ElasticMQ จาก docker compose) → http://localhost:8080
 make k3d-down
 
+cp infra/aws.env.example infra/aws.env   # ครั้งเดียว แล้ววาง credential จาก Learner Lab (AWS Details → AWS CLI) ทุก session
 bash scripts/check-lab.sh   # หลัง Start Lab ทุกครั้ง
-make up           # terraform apply 20-platform (EKS + RDS + NLB + ingress-nginx)
+make up           # terraform apply ทั้งหมด (ECR/S3/SQS/DNS + EKS + RDS + NLB + ingress-nginx) — root เดียว state เดียว
 make deploy       # build 7 images → ECR, สร้าง k8s Secrets, helm upgrade (migrate ก่อน), roll out
 make admin EMAIL=you@example.com   # ตั้ง admin คนแรก หลังสมัครผ่านหน้าเว็บ
-make down         # terraform destroy 20-platform — ทำทุกครั้งก่อนจบ session
+make down         # terraform apply -var platform=false (ลบ EKS/RDS/NLB, เก็บ ECR/S3/SQS/DNS) — ทำทุกครั้งก่อนจบ session
 ```
 
 รายละเอียด: [docs/SYSTEM-DESIGN.md](docs/SYSTEM-DESIGN.md) (สถาปัตยกรรม, §1.1 สรุปสิ่งที่เปลี่ยนตอน merge v2),

@@ -202,3 +202,14 @@ scripts+ci / docs).
 3. **PR to `main`.** `feat/v2-infra` pushed to `Vnntnn/…`, PR opened, Vnntnn merges.
 
 Status: **approved** → plan in `docs/superpowers/plans/`.
+
+## 9. Addendum (2026-10-24, after the k3d GATE) — one Terraform root
+
+Vnntnn: "terraform as one final thing, not 00-bootstrap / 10-foundation / …; just leave me
+a place for the credentials." Decision: a single root `infra/terraform/` (permanent
+resources at the root, EKS/RDS/NLB in `modules/platform` with `count = var.platform ? 1
+: 0`, Helm add-ons at the root behind the same toggle); `make down` = `terraform apply
+-var platform=false`. Credentials: `infra/aws.env` (gitignored, from `aws.env.example`),
+sourced by every Make target and script; account ID derived from them; the state bucket
+is created by `scripts/tf-init.sh`, which also carries the old `10-foundation` state over
+once. This supersedes decision D1's "Terraform split by lifetime" wording in the KB.

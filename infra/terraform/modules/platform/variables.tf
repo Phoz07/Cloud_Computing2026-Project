@@ -1,9 +1,3 @@
-variable "account_id" {
-  description = "AWS account ID. Guards against applying with stale credentials for another account."
-  type        = string
-  default     = "735838417080"
-}
-
 variable "region" {
   description = "AWS region. Learner Lab is us-east-1 only."
   type        = string
@@ -94,4 +88,23 @@ variable "db_engine_version" {
 variable "db_allocated_storage" {
   type    = number
   default = 20
+}
+
+# --- from the root's dns.tf; "" = DNS off ----------------------------------
+variable "acm_certificate_arn" {
+  description = "Wildcard ACM cert for the NLB TLS listener, or \"\"."
+  type        = string
+  default     = ""
+}
+
+variable "route53_zone_id" {
+  description = "Hosted zone that gets the ALIAS record to the NLB, or \"\"."
+  type        = string
+  default     = ""
+}
+
+variable "public_host" {
+  description = "The single public host (events.<domain>), or \"\"."
+  type        = string
+  default     = ""
 }

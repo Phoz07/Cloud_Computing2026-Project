@@ -38,3 +38,13 @@ keep_sets() {
   case " $* " in *" db-bootstrap "*) ;; *) out+=("--set" "dbMigrate.enabled=false") ;; esac
   echo "${out[*]}"
 }
+
+# --- AWS entry points ---------------------------------------------------------
+# infra/aws.env holds the Learner Lab session credentials (see infra/aws.env.example).
+load_aws_env() {
+  local f="${ROOT:-.}/infra/aws.env"
+  if [ -f "$f" ]; then set -a; . "$f"; set +a; fi
+  : "${AWS_DEFAULT_REGION:=us-east-1}"; export AWS_DEFAULT_REGION
+}
+tf() { terraform -chdir="${ROOT:-.}/infra/terraform" "$@"; }
+tfout() { tf output -raw "$1" 2>/dev/null; }

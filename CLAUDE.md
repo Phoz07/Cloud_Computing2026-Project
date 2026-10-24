@@ -210,16 +210,21 @@ the infra, with a report and a live demo. The v2 app above was merged onto the e
 infra on 2026-10-24 — spec `docs/superpowers/specs/2026-10-24-v2-infra-merge-design.md`,
 plan `docs/superpowers/plans/2026-10-24-v2-infra-merge.md`.
 
-**State:** `infra/terraform/00-bootstrap` (tfstate bucket, by hand) · `10-foundation`
-(7 ECR repos, uploads S3 bucket + `public/*` read policy, SQS mail queue + DLQ, optional
-`eventide/{google-oauth,stripe,gmail}` secrets, optional Route 53 zone + ACM cert) ·
-`20-platform` (raw `aws_eks_cluster` + node group, `db.t3.micro` RDS with ONE database
-`eventide`, Terraform NLB → ingress-nginx NodePort, metrics-server) · `infra/helm/eventide`
-(auth, event, registration, payment, mail-worker, redis, web, `/files` → S3, db-migrate
-hook) · `scripts/{deploy,teardown,k3d-up,k3d-down,admin,check-lab}.sh`. The k3d parity
+**State:** **one Terraform root, `infra/terraform/`, one state** (`README.md` there):
+permanent resources at the root (7 ECR repos, uploads S3 bucket + `public/*` read policy,
+SQS mail queue + DLQ, optional `eventide/{google-oauth,stripe,gmail}` secrets, optional
+Route 53 zone + ACM cert) and the nightly platform in `modules/platform` (raw
+`aws_eks_cluster` + node group, `db.t3.micro` RDS with ONE database `eventide`, Terraform
+NLB → ingress-nginx NodePort) plus the ingress-nginx / metrics-server Helm releases, all
+behind `var.platform` (`make up` = true, `make down` = false). **Credentials go in ONE
+place: `infra/aws.env`** (copy of `infra/aws.env.example`; gitignored; sourced by every
+Make target and script). `infra/helm/eventide` (auth, event, registration, payment,
+mail-worker, redis, web, `/files` → S3, db-migrate hook) ·
+`scripts/{tf-init,deploy,teardown,k3d-up,k3d-down,admin,check-lab}.sh`. The k3d parity
 GATE passed locally; **the v2 layout has not been applied to AWS yet** — next lab session:
-`check-lab.sh` → `terraform apply` 10-foundation (its README lists the expected diff) →
-`dns.auto.tfvars` with the real domain → `make up` → `make deploy` → `make down`.
+paste creds → `bash scripts/check-lab.sh` → `dns.auto.tfvars` with the real domain →
+`make up` (tf-init carries the old `10-foundation` state over once) → `make deploy` →
+`make down`.
 
 ### Read these before doing anything
 
@@ -247,7 +252,7 @@ These are hard and load-bearing — most odd design choices trace back to one of
 
 - **$50 hard cap.** Exceeding it locks the account and deletes all work. `~$1.10` per 4-hour
   session; leaving the platform layer up exhausts the budget in ~15 days.
-- **`terraform destroy` the `20-platform` layer at the end of every session** (`make down`).
+- **`make down` (`terraform apply -var platform=false`) at the end of every session.**
   The lab auto-stops EC2 only; RDS, the EKS control plane and ELBs keep billing. Worker
   nodes are in an ASG that relaunches lab-stopped instances.
 - **No IRSA** (`iam:CreateOpenIDConnectProvider` denied) — also no GitHub Actions OIDC, so
@@ -259,7 +264,7 @@ These are hard and load-bearing — most odd design choices trace back to one of
 - **Default VPC only, no NAT gateway.** Subnets pinned to **us-east-1a/b/c**.
 - **An org SCP denies `s3:GetBucketObjectLockConfiguration`** — every bucket is CLI-created
   (`terraform_data` + `local-exec`) and consumed via `data "aws_s3_bucket"`; config goes in
-  granular `aws_s3_bucket_*` resources. See `infra/terraform/10-foundation/s3.tf`.
+  granular `aws_s3_bucket_*` resources. See `infra/terraform/s3.tf`.
 - **`iam:GetRole` on `voclabs` is denied** — rules out `terraform-aws-modules/eks`. Raw
   `aws_eks_*` resources only.
 - **Unprobed (probed by `scripts/check-lab.sh` next session):** `sqs:*` and the account-level
@@ -282,29 +287,32 @@ These are hard and load-bearing — most odd design choices trace back to one of
 - **Mail** = `@app/mail` → SQS `eventide-mail-queue` → `mail-worker` Deployment → Gmail
   SMTP. Without `eventide/gmail` it runs dry and logs. **Payment** = Stripe; without
   `eventide/stripe` checkout is off. Both are Terraform-managed from gitignored
-  `*.auto.tfvars` in `10-foundation`.
+  `*.auto.tfvars` in `infra/terraform`.
 - **ingress-nginx as a `NodePort` Service + an NLB created by Terraform** (never
   `type=LoadBalancer` — that ELB would orphan outside Terraform state).
 - **Secrets** — `scripts/deploy.sh` builds four k8s Secrets each session: `eventide-common`
   (DATABASE_URL, S3_*, AWS_* session creds, MAIL_QUEUE_URL), `eventide-auth`
   (BETTER_AUTH_SECRET, GOOGLE_*), `eventide-payment` (STRIPE_*), `eventide-mail-worker`
   (GMAIL_*). Same chart on k3d with dev values. **ESO stays off** (SYSTEM-DESIGN §5.2.1).
-- **Terraform split by lifetime:** `00-bootstrap` (by hand) · `10-foundation` (never
-  destroyed) · `20-platform` (destroyed nightly).
+- **One Terraform root, split by `var.platform`:** permanent resources at the root,
+  the nightly EKS/RDS/NLB in `modules/platform` with `count = var.platform ? 1 : 0`.
+  `make down` is `terraform apply -var platform=false` — a normal apply that destroys
+  exactly the platform. The state bucket is created by `scripts/tf-init.sh`.
 - **DNS/TLS:** `events.<domain>` delegated to Route 53, apex on Cloudflare; zone + wildcard
-  ACM cert are permanent (`10-foundation/dns.tf`, opt-in via `dns.auto.tfvars`); the NLB
-  TLS listener + ALIAS record rebuild nightly. Single host — SPA at `/`, APIs at `/api/*`,
+  ACM cert are permanent (`infra/terraform/dns.tf`, opt-in via `dns.auto.tfvars`); the NLB
+  TLS listener + ALIAS record rebuild with the platform. Single host — SPA at `/`, APIs at `/api/*`,
   files at `/files/*`, no CORS. Stripe's webhook and Google's redirect URI both need this
   HTTPS host. Never recreate the hosted zone.
 
 ### Infra commands
 
 `make dev` (compose + migrate + every app in watch mode) · `make db-reset` · `make k3d` /
-`make k3d-down` (local parity: same chart, host compose stack) · `make up` (terraform apply
-`20-platform` + kubeconfig) · `make deploy` (`scripts/deploy.sh`: 7 images → ECR, Secrets,
-helm upgrade with the migrate hook) · `make admin EMAIL=…` (first admin, after registering
-in the web) · `make load BASE_URL=…` (k6 vs `/api/events`) · `make down` (`teardown.sh` —
-every session end). `bash scripts/check-lab.sh` after every lab reset. CI (`.github/
+`make k3d-down` (local parity: same chart, host compose stack) · `make up` (`tf-init` +
+`terraform apply` + kubeconfig) · `make plan` · `make deploy` (`scripts/deploy.sh`: 7 images
+→ ECR, Secrets, helm upgrade with the migrate hook) · `make admin EMAIL=…` (first admin,
+after registering in the web) · `make load BASE_URL=…` (k6 vs `/api/events`) · `make down`
+(`teardown.sh`: `platform=false` + proof — every session end). Credentials: `infra/aws.env`.
+`bash scripts/check-lab.sh` after every lab reset. CI (`.github/
 workflows/ci.yml`) runs the compose-backed tests, the web build and all 7 image builds —
 no AWS.
 
@@ -332,11 +340,11 @@ no AWS.
 1. The **assignment brief has never been seen** — every scope decision is inference.
 2. Exact **checkpoint date** and what it requires.
 3. **Final demo date.**
-4. The **real domain** for `dns.auto.tfvars` (decided 2026-10-24: a real domain, applied in
-   the next lab session).
+4. The **real domain** for `infra/terraform/dns.auto.tfvars` (decided 2026-10-24: a real
+   domain, applied in the next lab session).
 
 ### Security
 
 Paste script *output* into chats, never `aws_secret_access_key` / `aws_session_token`. Live
 lab credentials were pasted into a chat on 2026-09-06; the session was rotated afterward.
-Never commit `.env` or `*.auto.tfvars`.
+Never commit `.env`, `infra/aws.env` or `*.auto.tfvars`.

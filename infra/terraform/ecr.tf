@@ -13,7 +13,7 @@ resource "aws_ecr_repository" "service" {
     scan_on_push = true
   }
 
-  # 10-foundation is never destroyed; make repo deletion explicit if it ever is.
+  # the permanent layer is never destroyed; make repo deletion explicit if it ever is.
   force_delete = false
 }
 

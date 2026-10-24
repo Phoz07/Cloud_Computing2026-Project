@@ -6,6 +6,9 @@
 #
 #   bash scripts/admin.sh you@example.com      (or: make admin EMAIL=you@example.com)
 set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+. "$ROOT/scripts/lib.sh"
+load_aws_env # the EKS kubeconfig authenticates with these; harmless on k3d
 
 EMAIL="${1:?usage: admin.sh <email>}"
 # Same image, env (REDIS_URL, AUTH_SERVICE_URL, …) and Secrets as the running auth pod.

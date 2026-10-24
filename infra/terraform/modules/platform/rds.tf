@@ -79,7 +79,7 @@ resource "aws_db_instance" "main" {
 }
 
 # Master credentials + endpoint: DATABASE_URL for every service and the migrate
-# Job (scripts/deploy.sh → the eventide-common k8s Secret). Lives in 20-platform
+# Job (scripts/deploy.sh → the eventide-common k8s Secret). Lives in the platform module
 # (recreated each rebuild with a fresh password) — recovery_window_in_days = 0 so
 # the name frees immediately.
 resource "aws_secretsmanager_secret" "db_master" {

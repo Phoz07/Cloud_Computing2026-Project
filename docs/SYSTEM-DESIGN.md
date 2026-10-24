@@ -661,6 +661,8 @@ budget most of a day for it.
 
 ## 7. Infrastructure as code
 
+> **Superseded in part 2026-10-24:** the three-layer split (`00-bootstrap` / `10-foundation` / `20-platform`) collapsed into ONE root, `infra/terraform/`, with the nightly EKS/RDS/NLB in `modules/platform` behind `var.platform` (`make down` = `apply -var platform=false`). Same lifetimes, one state, one `apply`; credentials only in `infra/aws.env`. See `infra/terraform/README.md`.
+
 Terraform is split **by lifetime, not by resource type**:
 
 ```

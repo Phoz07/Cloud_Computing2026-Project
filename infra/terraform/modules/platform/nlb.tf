@@ -5,7 +5,7 @@
 #
 # ingress-nginx runs as a NodePort Service (installed via Helm in week 1 Day 3);
 # this NLB forwards :80 to its HTTP NodePort as plain TCP. :443 is a TLS listener
-# terminating the ACM cert (10-foundation/dns.tf) and forwarding plain HTTP to
+# terminating the ACM cert (../../dns.tf) and forwarding plain HTTP to
 # the same HTTP NodePort — once the custom domain is wired. Until then :443 is a
 # plain-TCP passthrough to ingress-nginx's own HTTPS NodePort.
 
@@ -80,7 +80,7 @@ resource "aws_lb_listener" "https_tls" {
   load_balancer_arn = aws_lb.ingress.arn
   port              = 443
   protocol          = "TLS"
-  certificate_arn   = local.acm_certificate_arn
+  certificate_arn   = var.acm_certificate_arn
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
 
   default_action {

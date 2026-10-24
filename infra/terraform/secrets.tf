@@ -7,7 +7,7 @@
 #
 # There is deliberately no per-service "runtime env" secret any more (v1 kept
 # eventide/<svc> placeholders for ESO): the only generated secrets live in
-# 20-platform's eventide/rds-master, rebuilt nightly (SYSTEM-DESIGN §5.2.1).
+# the platform module's eventide/rds-master, rebuilt nightly (SYSTEM-DESIGN §5.2.1).
 
 variable "stripe_secret_key" {
   description = "Stripe sandbox key — rk_test_… (restricted, recommended) or sk_test_…. Empty = payment disabled."

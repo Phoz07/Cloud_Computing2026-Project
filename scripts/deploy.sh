@@ -33,21 +33,20 @@ REGION=us-east-1
 IMAGES="${IMAGES:-auth event registration payment mail-worker web db-bootstrap}"
 TAG="${1:-$(git rev-parse --short HEAD)}"
 . "$ROOT/scripts/lib.sh"
+load_aws_env
 
-tf10() { terraform -chdir=infra/terraform/10-foundation output -raw "$1"; }
-tf20() { terraform -chdir=infra/terraform/20-platform output -raw "$1"; }
-
-REG="$(tf10 ecr_registry)"
-UPLOADS_BUCKET="$(tf10 uploads_bucket)"
-MAIL_QUEUE_URL="$(tf10 mail_queue_url)"
-GOOGLE_SECRET="$(tf10 google_oauth_secret 2>/dev/null || true)"
-STRIPE_SECRET="$(tf10 stripe_secret 2>/dev/null || true)"
-GMAIL_SECRET="$(tf10 gmail_secret 2>/dev/null || true)"
-MASTER_SECRET_ARN="$(tf20 rds_master_secret_arn)"
-NLB="$(tf20 nlb_dns_name)"
+REG="$(tfout ecr_registry)"
+UPLOADS_BUCKET="$(tfout uploads_bucket)"
+MAIL_QUEUE_URL="$(tfout mail_queue_url)"
+GOOGLE_SECRET="$(tfout google_oauth_secret || true)"
+STRIPE_SECRET="$(tfout stripe_secret || true)"
+GMAIL_SECRET="$(tfout gmail_secret || true)"
+MASTER_SECRET_ARN="$(tfout rds_master_secret_arn)"
+NLB="$(tfout nlb_dns_name)"
+[ -n "$NLB" ] || { echo "no platform in the Terraform state — run \`make up\` first"; exit 1; }
 # BETTER_AUTH_URL (cookies, OAuth callbacks). Prefer the custom domain (Route 53 +
-# ACM, 10-foundation/dns.tf); fall back to the bare NLB over http until DNS lands.
-PUBLIC_URL_TF="$(tf20 public_url 2>/dev/null || true)"
+# ACM, infra/terraform/dns.tf); fall back to the bare NLB over http until DNS lands.
+PUBLIC_URL_TF="$(tfout public_url || true)"
 PUBLIC_URL="${PUBLIC_URL:-${PUBLIC_URL_TF:-http://$NLB}}"
 
 echo "registry: $REG   tag: $TAG   images: $IMAGES   publicUrl: $PUBLIC_URL"

@@ -71,10 +71,14 @@ it (single DB, Redis pod, SQS mail worker, `/files` → S3, 4 k8s Secrets). Spec
       ingress, avatar upload → `/files/public/…` 200, `/files/private/…` 403, mail-worker
       dry-run log, `make admin` promotes.
 - [ ] Docs synced (this file, CLAUDE/AGENTS, README, KB supersede rows, SYSTEM-DESIGN §1.1); PR merged.
-- [ ] **Lab session** — `bash scripts/check-lab.sh` (read the SQS + Public-Access-Block lines)
-      → `terraform -chdir=infra/terraform/10-foundation apply` (expected diff in its README)
-      → `dns.auto.tfvars` with the real domain + apply + paste NS into Cloudflare → `make up`
-      → `make deploy` → the GATE curls against `https://<domain>` → `make admin EMAIL=…` →
+- [x] Terraform collapsed to ONE root (`infra/terraform/`, `modules/platform` behind
+      `var.platform`); credentials in `infra/aws.env` only (2026-10-24, Vnntnn's request).
+- [ ] **Lab session** — paste creds into `infra/aws.env` → `bash scripts/check-lab.sh` (read
+      the SQS + Public-Access-Block lines) → `infra/terraform/dns.auto.tfvars` with the real
+      domain → `make up` (tf-init creates the state bucket if needed and carries the old
+      `10-foundation` state over once; expect +mail-worker ECR, +2 SQS, +bucket policy,
+      −4 placeholder secrets, −CORS, + the whole platform) → paste NS into Cloudflare →
+      `make deploy` → the GATE curls against `https://<domain>` → `make admin EMAIL=…` →
       `make down`. **`GATE`**
 - [ ] Stripe webhook endpoint (`https://<domain>/api/payment/webhook`) + Gmail App Password →
       `stripe.auto.tfvars` / `gmail.auto.tfvars` — optional; dry run until then.
@@ -87,13 +91,12 @@ it (single DB, Redis pod, SQS mail worker, `/files` → S3, 4 k8s Secrets). Spec
 ### Every session start  (see `docs/week1-closeout.md` for the copy-paste version)
 
 - [ ] Learner Lab → **Start Lab**. Note the credit remaining.
-- [ ] Copy AWS CLI credentials into `~/.aws/credentials` (they expire with the session).
+- [ ] Paste the AWS CLI credentials into `infra/aws.env` (they expire with the session).
 - [ ] `bash scripts/check-lab.sh` — role suffixes / denials change on every reset.
-- [ ] *(first time / when DNS or OAuth changes)* fill `10-foundation/{dns,google}.auto.tfvars`
-      and `terraform -chdir=infra/terraform/10-foundation apply`; if DNS is new, paste
-      `terraform output route53_name_servers` into Cloudflare and wait for `aws acm
-      describe-certificate` to read `ISSUED`.
-- [ ] `make up` — `terraform apply 20-platform` (~17 min) + kubeconfig + `get nodes`.
+- [ ] *(first time / when DNS or OAuth changes)* fill `infra/terraform/{dns,google}.auto.tfvars`;
+      if DNS is new, paste `terraform output route53_name_servers` into Cloudflare after the
+      apply and wait for `aws acm describe-certificate` to read `ISSUED`.
+- [ ] `make up` — one `terraform apply` (~17 min) + kubeconfig + `get nodes`.
       Add `NODE_INSTANCE_TYPE=t3.medium` for the week-4 HPA load test.
 - [ ] `make deploy` — 7 images → ECR, the four k8s Secrets, `helm upgrade` (the `db-migrate`
       hook migrates first), roll out. No separate DB-bootstrap step any more.

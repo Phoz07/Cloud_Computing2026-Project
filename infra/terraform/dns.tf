@@ -1,16 +1,16 @@
 # Custom domain — a subdomain delegated to Route 53, apex stays on Cloudflare
 # (SYSTEM-DESIGN.md §5.5.1 option 2, chosen 2026-09-07).
 #
-# Lives in 10-foundation, NOT 20-platform, on purpose:
+# Part of the PERMANENT layer (never touched by `platform = false`), on purpose:
 #   * The hosted zone's NS records are pasted into Cloudflare BY HAND, once. If
 #     the zone were recreated every nightly rebuild the NS set would change and
 #     the delegation would break daily.
 #   * ACM DNS validation persists with the zone — the cert issues once and is
 #     reused across every platform rebuild.
 #
-# 20-platform reads `acm_certificate_arn` / `route53_zone_id` / `public_host`
-# from this layer's remote state and (re)points an ALIAS record at the fresh NLB
-# on each `make up`.
+# modules/platform gets `acm_certificate_arn` / `route53_zone_id` / `public_host`
+# as inputs (platform.tf) and (re)points an ALIAS record at the fresh NLB on
+# each `make up`.
 #
 # Disabled by default (`dns_domain = ""`): a plain `terraform apply` here creates
 # zero DNS resources. Set the domain in `dns.auto.tfvars` (gitignored) to enable.

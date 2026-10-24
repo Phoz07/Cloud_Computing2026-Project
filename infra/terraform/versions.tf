@@ -1,10 +1,12 @@
 terraform {
   required_version = ">= 1.10"
 
-  # Destroyed and recreated every session — see scripts/teardown.sh.
+  # ONE state for everything (permanent resources + the nightly platform). The
+  # bucket is account-scoped, so it is passed at init time by scripts/tf-init.sh:
+  #   terraform init -backend-config="bucket=eventide-tfstate-<account>"
+  # use_lockfile = true → S3 conditional-write locking, no DynamoDB table.
   backend "s3" {
-    bucket       = "eventide-tfstate-735838417080"
-    key          = "20-platform/terraform.tfstate"
+    key          = "eventide/terraform.tfstate"
     region       = "us-east-1"
     encrypt      = true
     use_lockfile = true
