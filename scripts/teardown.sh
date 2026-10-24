@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Destroy the 20-platform layer and PROVE it is gone.
+# Turn the platform off (`platform = false` in the single Terraform root) and PROVE it is gone.
 #
 # The lab auto-stops EC2 only. RDS, the EKS control plane and ELBs keep billing,
-# and the worker-node ASG relaunches lab-stopped instances. Leaving 20-platform
+# and the worker-node ASG relaunches lab-stopped instances. Leaving the platform
 # up between sessions exhausts the $50 cap in ~15 days. Run this at the END of
 # EVERY session and read the verification block.
 #
@@ -10,7 +10,8 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PLATFORM="$ROOT/infra/terraform/20-platform"
+. "$ROOT/scripts/lib.sh"
+load_aws_env
 
 echo "== 1. delete any Kubernetes-created load balancers (should be none — ingress is NodePort) =="
 if kubectl cluster-info >/dev/null 2>&1; then
@@ -30,8 +31,8 @@ else
 fi
 
 echo
-echo "== 2. terraform destroy 20-platform =="
-terraform -chdir="$PLATFORM" destroy -auto-approve
+echo "== 2. terraform apply -var platform=false  (destroys EKS + RDS + NLB + add-ons, keeps ECR/S3/SQS/secrets/DNS) =="
+tf apply -auto-approve -input=false -var platform=false
 
 echo
 echo "== 3. VERIFY — every list below must be empty =="

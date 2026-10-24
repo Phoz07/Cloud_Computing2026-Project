@@ -1,0 +1,49 @@
+# /files/<key> straight from ingress-nginx to the object store — S3 on EKS, the
+# host MinIO on k3d. The app stores keys and returns `/files/<key>` (packages/
+# storage fileUrl()), so the browser never learns the bucket or the endpoint.
+# Only `public/*` is readable: the bucket policy decides that (10-foundation/s3.tf,
+# minio-init in docker-compose.yml), the ingress forwards everything under /files/.
+#
+# A second Ingress because `rewrite-target` applies to every path of the Ingress
+# it is set on, and the API paths must stay untouched.
+apiVersion: v1
+kind: Service
+metadata:
+  name: files
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/part-of: eventide
+spec:
+  type: ExternalName
+  externalName: {{ .Values.files.host }}
+  ports:
+    - name: http
+      port: {{ .Values.files.port }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: eventide-files
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/part-of: eventide
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /{{ .Values.files.bucket }}/$1
+    nginx.ingress.kubernetes.io/backend-protocol: {{ .Values.files.protocol | quote }}
+    nginx.ingress.kubernetes.io/upstream-vhost: {{ .Values.files.host | quote }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - http:
+        paths:
+          - path: /files/(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: files
+                port:
+                  number: {{ .Values.files.port }}
+      {{- if .Values.ingress.host }}
+      host: {{ .Values.ingress.host | quote }}
+      {{- end }}

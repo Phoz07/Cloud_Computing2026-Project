@@ -1,6 +1,7 @@
 # k3d overlay — `helm ... -f values.yaml -f values.local.yaml`.
 # Mirrors scripts/k3d-up.sh: the in-cluster registry, the loadbalancer origin,
-# no ESO (secrets come from `kubectl create secret` against a local file).
+# no ESO (secrets come from `kubectl create secret` with dev values), and
+# /files served by the host MinIO (docker-compose.yml) through host.k3d.internal.
 
 publicUrl: http://localhost:8080
 
@@ -9,6 +10,12 @@ imageRegistry: "eventide-registry:5111"
 
 eso:
   enabled: false
+
+files:
+  host: host.k3d.internal
+  port: 9000
+  protocol: HTTP
+  bucket: event-assets
 
 # Single replica each — a 3-node k3d on a laptop.
 defaults:

@@ -1,158 +1,223 @@
-import { useQuery } from '@tanstack/react-query'
-import { createFileRoute, Link } from '@tanstack/react-router'
-import { ArrowRight, CalendarOff, Check, Sparkles } from 'lucide-react'
-import { EventCard } from '@/components/event-card'
-import { SiteFooter } from '@/components/site-footer'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
-import { Skeleton } from '@/components/ui/skeleton'
-import { eventsQuery } from '@/lib/queries'
+import { useQuery } from "@tanstack/react-query";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { ArrowRight, CalendarDays, CalendarPlus, CalendarX, History, Megaphone, RotateCw, Search, Tag, Telescope, UserPlus } from "lucide-react";
+import { useState } from "react";
+import { EventCard } from "@/components/event-card";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
+import { Skeleton } from "@/components/ui/skeleton";
+import { categoriesQueryOptions, publicEventsQueryOptions } from "@/lib/events";
+import { hasRole, useSession } from "@/lib/session";
 
-export const Route = createFileRoute('/')({
-  component: LandingPage,
-})
+const UPCOMING = 6;
 
-const ORGANIZER_FEATURES = [
-  'Publish events with multiple ticket types',
-  'Capacity enforced per event, no overselling',
-  'QR check-in for staff at the door',
-  'Sales and attendance summaries in real time',
-]
+export const Route = createFileRoute("/")({ component: HomePage });
 
-function LandingPage() {
+function HomePage() {
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-10 py-4">
       <Hero />
+      <Categories />
       <UpcomingEvents />
-      <OrganizerCta />
-      <SiteFooter />
+      <HostCta />
     </div>
-  )
+  );
 }
 
 function Hero() {
+  const navigate = Route.useNavigate();
+  const [search, setSearch] = useState("");
+
   return (
-    <section className="relative overflow-hidden">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -top-24 left-1/2 -z-10 h-72 w-[36rem] -translate-x-1/2 rounded-full bg-primary/15 blur-3xl"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -bottom-32 right-0 -z-10 h-64 w-96 rounded-full bg-primary/10 blur-3xl"
-      />
-      <div className="container mx-auto flex flex-col items-center px-4 py-20 text-center sm:py-28">
-        <p className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-border bg-card/70 px-3 py-1 text-xs text-muted-foreground backdrop-blur">
-          <Sparkles className="size-3.5 text-primary" />
-          Concerts, workshops, and community events across Thailand
-        </p>
-        <h1 className="max-w-3xl font-heading text-4xl font-black leading-tight tracking-tight sm:text-5xl">
-          Find your next
-          <br />
-          <span className="text-primary">unforgettable event.</span>
+    <section className="flex flex-col gap-8 rounded-3xl border bg-muted/40 px-6 py-10 sm:px-12 sm:py-16">
+      <div className="flex max-w-2xl flex-col gap-4">
+        {/* Thai has no word spaces: break at the phrase boundary rather than leave "ทันที" alone on a line */}
+        <h1 className="text-4xl leading-snug font-bold tracking-tight sm:text-5xl">
+          ค้นหาอีเวนต์ที่อยากไป <span className="sm:block">แล้วจองตั๋วได้ทันที</span>
         </h1>
-        <p className="mt-4 max-w-xl text-balance text-muted-foreground">
-          Browse curated events, reserve tickets in a few clicks, and manage everything from one
-          place — or apply to become an organizer and run your own.
-        </p>
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <Button size="lg" render={<Link to="/events" />}>
-            Browse events
-            <ArrowRight data-icon="inline-end" />
-          </Button>
-          <Button size="lg" variant="outline" render={<Link to="/profile" />}>
-            Become an organizer
-          </Button>
-        </div>
+        <p className="text-lg text-muted-foreground">ลงทะเบียนเสร็จแล้ว ตั๋วจะส่งไปที่อีเมลของคุณ และเปิดดูได้ทุกเมื่อในหน้าตั๋วของฉัน</p>
+      </div>
+      <form
+        role="search"
+        className="flex flex-col gap-3 sm:flex-row sm:items-center"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void navigate({ to: "/events", search: { q: search.trim() || undefined } });
+        }}
+      >
+        <InputGroup className="h-11 sm:max-w-md">
+          <InputGroupInput
+            enterKeyHint="search"
+            placeholder="ค้นหาชื่ออีเวนต์หรือสถานที่"
+            aria-label="ค้นหาอีเวนต์"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton type="submit" variant="default" size="sm">
+              <Search data-icon="inline-start" />
+              ค้นหา
+            </InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+        <Link to="/events" className={buttonVariants({ variant: "outline", size: "lg" })}>
+          <Telescope data-icon="inline-start" />
+          สำรวจอีเวนต์
+        </Link>
+      </form>
+    </section>
+  );
+}
+
+function Categories() {
+  const { data: categories, isPending } = useQuery(categoriesQueryOptions);
+  if (!isPending && !categories?.length) return null;
+
+  return (
+    <section className="flex flex-col gap-4" aria-labelledby="categories-heading">
+      <h2 id="categories-heading" className="flex items-center gap-2 text-xl font-bold">
+        <Tag className="size-5 text-primary" />
+        หมวดหมู่
+      </h2>
+      <div className="flex flex-wrap gap-2">
+        {isPending
+          ? Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-8 w-24 rounded-4xl" />)
+          : categories?.map((c) => (
+              <Link
+                key={c.id}
+                to="/events/categories/$category"
+                params={{ category: c.slug }}
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                {c.name}
+              </Link>
+            ))}
       </div>
     </section>
-  )
+  );
 }
 
 function UpcomingEvents() {
-  const { data, isPending } = useQuery(eventsQuery({ page: 1, pageSize: 6 }))
-  const items = data?.items ?? []
+  const { data, isError, refetch, isRefetching } = useQuery(publicEventsQueryOptions({ page: 1, pageSize: UPCOMING }));
 
   return (
-    <section className="container mx-auto px-4 py-16">
-      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <h2 className="font-heading text-2xl font-black tracking-tight sm:text-3xl">
-            Upcoming events
-          </h2>
-          <p className="text-sm text-muted-foreground">The latest events open for registration.</p>
-        </div>
-        <Button variant="ghost" render={<Link to="/events" />}>
-          View all
-          <ArrowRight data-icon="inline-end" />
-        </Button>
+    <section className="flex flex-col gap-4" aria-labelledby="upcoming-heading">
+      <div className="flex items-center justify-between gap-4">
+        <h2 id="upcoming-heading" className="flex items-center gap-2 text-xl font-bold">
+          <CalendarDays className="size-5 text-primary" />
+          อีเวนต์ที่กำลังจะมาถึง
+        </h2>
+        {!!data?.total && (
+          <Link to="/events" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+            ดูทั้งหมด
+            <ArrowRight data-icon="inline-end" />
+          </Link>
+        )}
       </div>
 
-      {isPending ? (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton
-              key={
-                // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length placeholder list
-                i
-              }
-              className="aspect-[4/3] rounded-xl"
-            />
-          ))}
-        </div>
-      ) : items.length === 0 ? (
+      {isError ? (
         <Empty>
           <EmptyHeader>
-            <CalendarOff />
-            <EmptyTitle>No upcoming events</EmptyTitle>
-            <EmptyDescription>Check back soon, or apply to create the first one.</EmptyDescription>
+            <EmptyMedia variant="icon">
+              <CalendarX />
+            </EmptyMedia>
+            <EmptyTitle>โหลดอีเวนต์ไม่สำเร็จ</EmptyTitle>
+            <EmptyDescription>กรุณาลองใหม่อีกครั้ง</EmptyDescription>
           </EmptyHeader>
+          <EmptyContent>
+            <Button variant="outline" disabled={isRefetching} onClick={() => void refetch()}>
+              <RotateCw data-icon="inline-start" />
+              ลองอีกครั้ง
+            </Button>
+          </EmptyContent>
+        </Empty>
+      ) : !data ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: UPCOMING }, (_, i) => (
+            <Skeleton key={i} className="h-80" />
+          ))}
+        </div>
+      ) : data.items.length === 0 ? (
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <CalendarX />
+            </EmptyMedia>
+            <EmptyTitle>ยังไม่มีอีเวนต์ที่กำลังจะมาถึง</EmptyTitle>
+            <EmptyDescription>กลับมาดูใหม่เร็วๆ นี้ หรือดูอีเวนต์ที่จัดไปแล้ว</EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Link to="/events" search={{ when: "past" }} className={buttonVariants({ variant: "outline" })}>
+              <History data-icon="inline-start" />
+              ดูอีเวนต์ที่ผ่านไปแล้ว
+            </Link>
+          </EmptyContent>
         </Empty>
       ) : (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {items.map((event) => (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {data.items.map((event) => (
             <EventCard key={event.id} event={event} />
           ))}
         </div>
       )}
     </section>
-  )
+  );
 }
 
-function OrganizerCta() {
+const approvalNote = "เมื่อผู้ดูแลระบบอนุมัติ คุณจะสร้างอีเวนต์ เปิดขายตั๋ว และเช็คอินผู้เข้าร่วมได้";
+
+/** Where hosting starts depends on who's looking: sign up, apply, or go straight to a new event. */
+function HostCta() {
+  const { data: session, isPending } = useSession();
+  const user = session?.user;
+
   return (
-    <section className="relative overflow-hidden">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute left-0 top-1/2 -z-10 h-64 w-96 -translate-y-1/2 rounded-full bg-primary/10 blur-3xl"
-      />
-      <div className="container mx-auto px-4 py-16">
-        <div className="mx-auto flex max-w-3xl flex-col items-center text-center">
-          <Badge variant="secondary" className="mb-4">
-            Free events only, for now
-          </Badge>
-          <h2 className="font-heading text-2xl font-black tracking-tight sm:text-3xl">
-            Want to run your own event?
-          </h2>
-          <p className="mt-2 max-w-xl text-muted-foreground">
-            Submit an organizer application. Once an admin approves it, you can create and manage
-            events right away.
-          </p>
-          <ul className="mt-6 grid gap-2 text-left text-sm sm:grid-cols-2">
-            {ORGANIZER_FEATURES.map((feature) => (
-              <li key={feature} className="flex items-start gap-2">
-                <Check className="mt-0.5 size-4 shrink-0 text-primary" />
-                <span className="text-muted-foreground">{feature}</span>
-              </li>
-            ))}
-          </ul>
-          <Button size="lg" className="mt-8" render={<Link to="/profile" />}>
-            Apply to become an organizer
-            <ArrowRight data-icon="inline-end" />
-          </Button>
-        </div>
-      </div>
+    <section aria-labelledby="host-heading">
+      <Card>
+        <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-1">
+            <h2 id="host-heading" className="flex items-center gap-2 text-xl font-bold">
+              <Megaphone className="size-5 text-primary" />
+              จัดอีเวนต์ของคุณเอง
+            </h2>
+            {isPending ? (
+              <Skeleton className="h-5 w-72 max-w-full" />
+            ) : (
+              <p className="text-muted-foreground">
+                {!user
+                  ? `สมัครสมาชิกแล้วยื่นใบสมัครเป็นผู้จัดงาน ${approvalNote}`
+                  : hasRole(user, ["organizer", "admin"])
+                    ? "สร้างอีเวนต์ใหม่ ตั้งประเภทตั๋ว แล้วเผยแพร่เมื่อพร้อม"
+                    : `ยื่นใบสมัครเป็นผู้จัดงาน ${approvalNote}`}
+              </p>
+            )}
+          </div>
+          {isPending ? (
+            <Skeleton className="h-10 w-40 shrink-0 rounded-4xl" />
+          ) : !user ? (
+            <Link
+              to="/register"
+              search={{ redirect: "/profile/organizer" }}
+              className={buttonVariants({ size: "lg", className: "shrink-0" })}
+            >
+              <UserPlus data-icon="inline-start" />
+              สมัครสมาชิก
+            </Link>
+          ) : hasRole(user, ["organizer", "admin"]) ? (
+            <Link to="/dashboard/events/new" className={buttonVariants({ size: "lg", className: "shrink-0" })}>
+              <CalendarPlus data-icon="inline-start" />
+              สร้างอีเวนต์
+            </Link>
+          ) : (
+            <Link to="/profile/organizer" className={buttonVariants({ size: "lg", className: "shrink-0" })}>
+              <CalendarPlus data-icon="inline-start" />
+              สมัครเป็นผู้จัดงาน
+            </Link>
+          )}
+        </CardContent>
+      </Card>
     </section>
-  )
+  );
 }

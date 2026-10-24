@@ -1,28 +1,23 @@
 {
-  "name": "@eventide/event",
-  "version": "0.0.0",
+  "name": "@app/event",
   "private": true,
   "type": "module",
-  "exports": {
-    "./app": "./src/index.ts"
-  },
   "scripts": {
-    "dev": "PORT=3001 bun --watch src/index.ts",
-    "build": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile dist/server src/index.ts",
-    "start": "./dist/server",
-    "lint": "biome check .",
-    "check-types": "tsc --noEmit",
-    "test": "bun test"
+    "dev": "PORT=3002 bun --env-file=../../.env --watch src/index.ts",
+    "test": "for f in test/*.test.ts; do bun --env-file=../../.env test $f || exit 1; done"
   },
+  "main": "src/index.ts",
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1127.0",
-    "@aws-sdk/s3-request-presigner": "^3.1127.0",
-    "@elysiajs/openapi": "^1.4.11",
-    "@eventide/db": "workspace:*",
-    "@eventide/shared": "workspace:*",
-    "drizzle-orm": "^0.45.2",
-    "elysia": "^1.4.9",
-    "postgres": "^3.4.9",
-    "zod": "^4.1.11"
+    "@app/auth-guard": "workspace:*",
+    "@app/db": "workspace:*",
+    "@app/tickets": "workspace:*",
+    "@app/mail": "workspace:*",
+    "@app/storage": "workspace:*",
+    "elysia": "^2.0.0-rc.0",
+    "sanitize-html": "^2.18.1"
+  },
+  "devDependencies": {
+    "@types/sanitize-html": "^2.16.2",
+    "typescript": "^7.0.2"
   }
 }

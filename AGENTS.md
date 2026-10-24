@@ -1,56 +1,350 @@
-# Repository Guidelines
+# AGENTS.md
 
-## Project Structure & Module Organization
+This file provides guidance to AI coding agents when working with code in this repository.
 
-Eventide is a Bun/Turborepo monorepo. Applications live in `apps/`: `auth`, `event`,
-`registration`, and `payment` are Elysia services; `web` is a Vite/React SPA. Shared environment, model,
-and JWT helpers belong in `packages/shared`; Drizzle schemas and database tooling belong in
-`packages/db`. Keep service features under
-`apps/<service>/src/modules/<feature>/`. Tests are stored in each workspace's `test/`
-directory or beside shared code as `*.test.ts`.
+## Project
 
-Infrastructure is split between `infra/terraform/{00-bootstrap,10-foundation,20-platform}`
-and the Helm chart at `infra/helm/eventide`. Operational scripts live in
-`scripts/`; design decisions and progress are documented in `docs/`.
+Eventide: an event ticketing website built as a Bun-workspace monorepo of microservices. Stack: React + TanStack Router (web), ElysiaJS (services), Drizzle + Postgres (data), S3 (files). User-facing copy is in Thai.
 
-## Build, Test, and Development Commands
+### Roles
 
-- `bun install`: install all workspace dependencies.
-- `make dev`: start Postgres, create/migrate the four databases, and run all apps in watch mode.
-- `make seed`: load local demo users, events, and registrations.
-- `bun run build`: build workspaces through Turborepo.
-- `bun run lint`: run Biome checks across the repository.
-- `bun run check-types`: run TypeScript validation without emitting files.
-- `bun run test`: execute Bun test suites.
-- `make k3d` / `make k3d-down`: manage the local Kubernetes parity environment.
+- **user**: enroll in a ticket, view own tickets, manage own profile, apply to become an organizer
+- **organizer**: create events, ticket types and enrollment forms; add team members; check in tickets; view the event dashboard; manage **only their own** events
+- **admin**: manage all events, suspend accounts, manage other accounts, approve organizer applications (user → organizer)
 
-For AWS sessions, use `make up`, `make db-bootstrap`, `make deploy`, and always finish with
-`make down` so billable EKS, RDS, and NLB resources are destroyed.
+### Auth and email
 
-## Coding Style & Naming Conventions
+- **Auth:** `apps/auth` runs Better Auth (load the `better-auth-*` skills before changing it).
+  - Login is email/password, plus Google, which is enabled only when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set (`GET /api/auth/providers` tells the web).
+    - Account linking keeps Better Auth's defaults: Google is merged into an existing account only if that account's email is verified. Email verification isn't set up, so password users get `account_not_linked` and link Google from `/profile` instead.
+  - The admin plugin stores the role (`user` / `organizer` / `admin`, defined in `packages/auth-guard/src/permissions.ts` together with the domain permission statements) on `users.role`. Suspending an account is the admin plugin's **ban**.
+  - Organizer applications live in `apps/auth` (`/api/auth/organizer-applications`, table `organizer_applications`). Approving one sets the role in a transaction.
+  - `GET /api/auth/organizers/:id` is the public organizer profile the event page shows (organization name from the approved application, avatar, approval date). It never returns the email or the application's contact/reason, and answers 404 for plain users.
+  - Deleting an account (self-delete or the admin plugin's remove-user) is refused with `ORGANIZER_HAS_EVENTS` while the user organizes events. `events.organizer_id` is `ON DELETE RESTRICT`, and Better Auth deletes a user's sessions and accounts before the user row, so the check has to run before Better Auth starts.
+  - Bootstrap the first admin with `cd apps/auth && bun run admin:promote <email>` after registering in the web (on a cluster: `make admin EMAIL=<email>`).
+- **Service auth:** only `apps/auth` touches the auth tables and holds `BETTER_AUTH_SECRET`. Every other service does `.use(authGuard)` from `@app/auth-guard`.
+  - On each request the guard forwards the cookie to `AUTH_SERVICE_URL/api/auth/get-session` and caches the answer in Redis for 60s.
+  - `databaseHooks` in `apps/auth/src/libs/auth.ts` write a revoked marker on ban, role change and sign-out, so those apply on the next request. Anything else that changes a role or deletes sessions outside Better Auth must call `markUserRevoked()`.
+  - Design, diagrams and failure modes: `docs/auth.md`.
+- **Email:** nothing sends mail inline. Producers call `enqueueMail()` from `@app/mail`, which puts a message on the SQS `mail-queue`. `apps/mail-worker` consumes the queue and sends with **Nodemailer over Gmail SMTP**.
+  - A message is deleted only after it sends. Failures are retried and land in `mail-dlq` after 5 receives.
+  - Without `GMAIL_USER` / `GMAIL_APP_PASSWORD`, the worker runs dry and logs the rendered mail instead of sending it.
 
-Biome is authoritative: two-space indentation, 100-character lines, single quotes, and
-semicolons only when required. Run `bun run format` before committing. Use TypeScript ESM,
-`camelCase` for functions and variables, `PascalCase` for React components/types, and
-kebab-case for infrastructure filenames. Preserve Elysia method chains and define request
-models with Elysia `t`/TypeBox. Liveness endpoints must not query the database.
+## Commands
 
-## Testing Guidelines
+Use Bun for everything: `bun install`, `bun run <script>`, `bunx <pkg>`, `bun test`. Run these from the repo root unless noted.
 
-Use Bun's test runner and name files `*.test.ts`. Add focused tests for service routes,
-database boundaries, shared utilities, and S3 signing behavior. There is no numeric coverage
-gate; new behavior should include regression coverage. Run lint, type checks, tests, and the
-relevant local or k3d flow before opening a PR.
+```sh
+cp .env.example .env          # one-time; every workspace reads the ROOT .env
+bun run infra:up              # start docker-compose services (infra:down to stop, infra:reset wipes volumes)
+bun run dev                   # every apps/* dev script in parallel (web, all services, mail worker)
+bun run --filter @app/event dev   # one workspace only
 
-## Commit & Pull Request Guidelines
+bun run db:generate           # generate SQL migration from schema changes -> packages/db/drizzle/
+bun run db:migrate            # apply migrations
+bun run db:studio             # Drizzle Studio
 
-History follows Conventional Commit-style subjects such as `feat(auth): ...`,
-`docs(todo): ...`, and `chore: ...`. Keep commits scoped and imperative. PRs should explain
-the change and trade-offs, list verification commands, link the relevant issue or TODO, and
-include screenshots for UI changes or deployment evidence for infrastructure changes.
+bun run --filter @app/web lint    # oxlint (web only, no lint config elsewhere)
+bun run --filter @app/web build   # tsc -b && vite build
+```
 
-## Security & Configuration
+**Type checking:** run `bun check` from **inside** a workspace (`cd apps/web && bun check`; `cd apps/event && bun check src/index.ts`). The root `bun run typecheck` reads the root tsconfig, which has no DOM lib and no `@/*` alias, so it reports false errors in `apps/web`.
 
-Never commit AWS session credentials, OAuth secrets, `.env` files, or `*.auto.tfvars`.
-Applications consume secrets through environment variables. Review `CLAUDE.md` and
-`docs/PROJECT-KNOWLEDGE-BASE.md` before changing architecture or lab-specific infrastructure.
+**Tests:** use `bun test` (`import { test, expect } from "bun:test"`). Suites that need env or infra get a `test` script that passes `--env-file=../../.env`; run them with `bun run test` inside `packages/auth-guard`, `packages/storage`, `apps/auth`, `apps/event`, `apps/registration` or `apps/payment` (they need `infra:up`). The `test` scripts of `apps/event`, `apps/registration` and `apps/payment` run each file in its own process, because the auth mock (`mock.module`) leaks between files. For a single file use `bun test test/event.test.ts`, and for a single test use `bun test -t "pattern"`.
+
+**shadcn CLI:** `components.json` lives in `apps/web`, so run `cd apps/web && bunx shadcn@latest add <component>`. The shadcn MCP server is configured in `.mcp.json`.
+
+## Local infrastructure (`docker-compose.yml`)
+
+| Service | Port(s) | Notes |
+|---|---|---|
+| Postgres 18 | 5432 | `DATABASE_URL` |
+| Redis 8 | 6379 | `REDIS_URL` (the default env var for Bun's `redis` client) |
+| ElasticMQ (SQS) | 9324 API, 9325 UI | queues defined in `infra/elasticmq/elasticmq.conf` |
+| MinIO (S3) | 9000 API, 9001 console | `minio-init` creates the `event-assets` bucket |
+
+- **Queues:** `mail-queue` has a 30s visibility timeout and a 10s long poll. After 5 receives a message moves to `mail-dlq`. A new queue must be added to `elasticmq.conf` and get its URL variable in `.env.example`.
+- **S3:** the `S3_*` variables in `.env.example` are the ones Bun's built-in `s3` client reads by default, so `import { s3 } from "bun"` works without config. `minio-init` also sets a bucket policy that lets anyone read `public/*`; every other prefix stays private. In dev the Vite server proxies `/files/<key>` to the bucket.
+- **Env loading:** workspace scripts run from the package directory, so each one passes `--env-file=../../.env`. Keep doing that in new packages.
+
+## Architecture
+
+### Workspaces
+
+- `apps/web` (`@app/web`): Vite + React 19 SPA on :5173. Uses TanStack Router (file-based), TanStack Query and shadcn/ui.
+- One Elysia service per domain, each with its own process, port and path prefix:
+
+  | Workspace | Port | Prefix | Owns |
+  |---|---|---|---|
+  | `apps/auth` | 3001 | `/api/auth` | Better Auth: accounts, sessions, roles, bans |
+  | `apps/event` | 3002 | `/api/events` | events (CRUD, slug, status, refund policy, HTML description), categories (admin-only), cover + gallery, invitations (who may open an `invite`-status event, by email), ticket types and their registration forms (`ticket_types`, `ticket_type_questions`) |
+  | `apps/registration` | 3003 | `/api/regis` | seat availability, enrollments (enroll, approve / reject), tickets ("my tickets"), check-in |
+  | `apps/payment` | 3004 | `/api/payment` | Stripe Checkout for enrollments, the Stripe webhook, refunds (`payments`, `refunds`) |
+
+- `apps/mail-worker`: an SQS consumer with no HTTP server. It sends queued mail through Gmail.
+- `packages/db` (`@app/db`): the Drizzle schema and client that every service shares.
+- `packages/auth-guard` (`@app/auth-guard`): roles and permissions (`./permissions`, browser-safe, also used by the web), the session introspection + Redis cache, and the `authGuard` Elysia plugin.
+- `packages/mail` (`@app/mail`): the mail queue contract. It holds the `MailMessage` type, the shared `sqs` client, `enqueueMail()` for producers and `parseMailMessage()` for the worker.
+- `packages/storage` (`@app/storage`): file storage that each service imports (a library, not a service), built on [files-sdk](https://files-sdk.dev) over Bun's S3 client. See **Files** below.
+- `packages/tickets` (`@app/tickets`): ticket issuing shared by registration and payment (a library): which enrollments hold seats, confirming one, mailing its tickets. See **Tickets** below.
+- `services/*` is declared as a workspace glob but is unused. Root `bun run dev` only starts `apps/*`.
+
+The generic Bun advice doesn't fully apply here. The web app **does** use Vite (not Bun HTML imports), and the DB layer uses Drizzle on the **postgres.js** driver (not `Bun.sql`). Elsewhere in services, prefer Bun built-ins (`Bun.redis`, `s3`, `Bun.file`, `Bun.$`).
+
+### How web talks to services (end-to-end type safety)
+
+1. Each service's root Elysia instance owns a path prefix: `new Elysia({ prefix: "/api/events" })`.
+2. In dev, the Vite server proxies that same prefix to the service port (`server.proxy` in `vite.config.ts`).
+3. The service package's `main` exports its app type (`export type Event = typeof event`).
+4. `apps/web` lists the service as a `workspace:*` **devDependency** and builds an Eden Treaty client in `src/lib/api.ts`: `treaty<App>(window.location.origin)`.
+5. Calls mirror the full path, e.g. `eventClient.api.events.health.get()`. They return `{ data, error }`, so throw `error` inside the `queryFn` so that TanStack Query sees the failure.
+
+Adding a service means touching all of these. Create `apps/<name>/package.json` with the dev script `PORT=<port> bun --env-file=../../.env --watch src/index.ts` and a dependency on `@app/db`. Add a prefixed root instance with its type exported, a proxy entry in `vite.config.ts`, the web devDependency, and a treaty client in `api.ts`. Also add its health check to `src/routes/status.tsx` (`/status`), the page that shows the status of every service.
+
+**Better Auth mounting:** don't use `.mount(auth.handler)` inside the prefixed instance. `.mount()` strips the prefix, so Better Auth, which routes on the full `/api/auth/*` path, returns 404. `apps/auth/src/index.ts` forwards the request untouched with `.all('/*', { parse: 'none' }, ({ request }) => auth.handler(request))`. Better Auth's `baseURL` (`BETTER_AUTH_URL`) is the browser-facing origin, i.e. the Vite server in dev, not port 3001.
+
+### Backend: Elysia 2
+
+The services are on `elysia@^2.0.0-rc`, whose APIs differ from v1. Load the `elysiajs` skill or the docs instead of relying on memory. Follow https://next.elysiajs.com/essential/best-practice/. Target layout per service (`apps/event`, `apps/registration` and `apps/payment` follow it, e.g. `apps/event/src/routes/{events,categories,media,invitations,ticket-types}`):
+
+```
+src/
+  index.ts             import app, export it, call .listen()
+  app.ts               compose features with .use(); export app + App type; never listens
+  env.ts               validated env
+  routes/<feature>/
+    index.ts           controller: Elysia instance; owns status codes, headers, cookies, redirects
+    model.ts           request/response schemas + derived types
+    service.ts         plain functions with explicit args; may query db directly
+  plugins/             shared, *named* plugins (new Elysia({ name })), e.g. auth/role macros
+  libs/                shared non-Elysia clients/helpers (only once a second feature needs them)
+test/<feature>.test.ts
+```
+
+- **Models:** export one object per route named `[Pathname][Method]` relative to the prefix (`Post`, `ByIdGet`). It holds PascalCase `Body` / `Params` / `Query` / `Response` schemas, plus a matching `UnwrapModels<typeof X>` type. Import it as a namespace: `import * as EventModel from "./model"`. Models are the API contract, not DB tables, so never expose sensitive columns when deriving them from Drizzle.
+- **Services:** never pass the request context or cookies. Pass only the values the service needs.
+- **Errors:** return errors rather than throwing them, so Eden and OpenAPI can infer them. When the same error is used in several places, make it a class extending `HTTPError.id("CODE", status)`.
+- **Dependencies:** use `decorate` for app-lifetime singletons and `derive` for per-request values. Release decorated resources in `onStop`.
+- **Authorization:** `.use(authGuard)` gives the route options `{ auth: true }`, `{ role: ["organizer", "admin"] }` and `{ permission: { event: ["create"] } }`, each adding `user` / `session` to the context. Put ownership checks (organizers may only touch their own events) in a named plugin or macro in `plugins/`, never ad hoc in handlers. `apps/event/src/plugins/event-owner.ts` (`{ eventOwner: true }`, which adds `event`) is the example. A macro can't read another macro's derives, so such a macro calls `authenticate()` from `@app/auth-guard` itself.
+- **Testing:** test services directly, and test controllers through `app.handle()` or `treaty(app)`.
+
+### Database: `@app/db`
+
+- Put one schema file per domain in `packages/db/src/schema/` and re-export it from `schema/index.ts`. `drizzle.config.ts` reads the whole directory.
+- Every table spreads `id()` (uuid, `defaultRandom`) and `...timestamps` (`created_at` / `updated_at` with `$onUpdate`) from `_columns.ts`. Use snake_case SQL column names and camelCase TS keys.
+- Services import `db`, the tables and the query operators (`eq`, `and`, `sql`, …) from `@app/db`. If you need a new operator, add it to the re-export list in `packages/db/src/index.ts` instead of adding `drizzle-orm` to a service.
+- Store S3 object **keys**, not URLs (e.g. `events.coverImageKey`). `users.image` is the one exception; see **Files** below.
+- `schema/auth.ts` holds the Better Auth tables (`users`, `sessions`, `accounts`, `verifications`). They are plural (`usePlural: true`) with uuid ids (`generateId: "uuid"`), so other tables can reference `users.id` as a `uuid`.
+  - The shape must match what Better Auth expects; it validates the Drizzle schema at startup and logs mismatches.
+  - After adding a Better Auth plugin, run `cd apps/auth && bunx auth@latest generate --config src/libs/auth.ts --output <scratch file> --yes`, merge the diff into `auth.ts` using the `_columns.ts` helpers, then run the migration flow.
+- Stripe access goes through the client in `apps/payment/src/libs/stripe.ts`. Live keys (`sk_live_` / `rk_live_`) are refused outside production.
+- Migration flow: edit the schema → `bun run db:generate` → review the SQL in `packages/db/drizzle/` → `bun run db:migrate`.
+
+### Files: `@app/storage`
+
+- **Uploads go through the owning service** as multipart. The route body is `{ file: t.File() }`, and the service calls `storeFile(kind, ownerId, file)`.
+  - It sniffs the bytes (files-sdk `contentType()`), then checks the kind's types and size (`validation()`).
+  - It **returns** `UnsupportedFile` (415), `FileTooLarge` (413) or `StorageUnavailable` (503) with Thai `detail`s.
+  - Don't put `type` on `t.File`: Elysia 2 would need a file-type detector, and its 422 isn't in Thai.
+- **Kinds** live in `packages/storage/src/kinds.ts` (`avatar`, `eventCover`, `eventAsset`), so add new ones there.
+  - Keys are `public/<users|events>/<ownerId>/<folder>/<uuidv7>`.
+  - Keys have no extension, because the stored Content-Type comes from the bytes.
+- **Store the key** in the DB (`events.coverImageKey`, `event_assets.key`) and send `fileUrl(key)` (`/files/<key>`) in responses, so the web never imports `@app/storage`.
+  - The exception is `users.image`, which holds the `/files/<key>` path, because Better Auth owns that field and Google writes URLs into it.
+  - `ownedKey(url, kind, ownerId)` gives the key back only when the URL is that owner's own file, so a Google photo or a path the user set by hand is never deleted.
+- **Replace, then delete:** commit the new key (lock the row when replacing), then `deleteFile(old)`. It is best effort and never throws, so a failure leaves an orphaned object rather than a failed request.
+- **Tests:** `useMemoryStorage()` from `@app/storage/testing` swaps in files-sdk's in-memory adapter and returns it for assertions.
+- **Not used on purpose:** files-sdk's `files-sdk/api` gateway and its React upload components. They would move authorization and the DB write out of the service's request and lose the Eden types.
+- Design, diagrams and failure modes: `docs/storage.md`.
+
+### Tickets: `@app/tickets`
+
+- **Ticket types** (`apps/event`) have a kind: `first_come` (needs a `quota`), `approval` (the organizer approves each enrollment, no quota) or `invite` (only emails in `event_invitations`, one enrollment per invitation). Prices are whole baht; 0 is free, a paid price is at least ฿20 (Stripe's minimum). `maxPerUser` counts across all of an account's enrollments of that type.
+  - Each type has its own questions (`ticket_type_questions`: short text, long text, choice), saved as one list that replaces the old one. First name, last name and email are on every ticket and are not questions.
+  - The web pre-fills ticket 1 from `users.firstName` / `lastName` (Better Auth `additionalFields`, editable on `/profile`, filled from Google).
+- **An enrollment** (`apps/registration`) is one order: `quantity` tickets with one attendee each (`tickets`: name, lowercase email, `answers` copied with their labels).
+  - Statuses: `pending` (approval) → `awaiting_payment` (paid) → `confirmed`, or `rejected` / `expired`.
+  - **Active** = `confirmed`, `pending`, or `awaiting_payment` whose `expires_at` is ahead (`activeEnrollment()`). A lapsed hold stops counting at once, with no job; reads show it as `expired` (`effectiveStatus()`).
+  - **Seats:** anything that counts seats against the quota first locks the `ticket_types` row (`SELECT … FOR UPDATE`): enrolling, quota edits and `confirmEnrollment()`.
+  - "My tickets" shows confirmed tickets the account bought **or** that carry its email.
+- **Payment** (`apps/payment`): `POST /checkout` makes (or reuses) a Stripe Checkout session; `POST /webhook` (`parse: 'none'`, `constructEventAsync`, since the SDK verifies with SubtleCrypto under Bun) confirms the enrollment, or refunds a payment that arrived after its hold lapsed and the seats went.
+  - Paid first_come / invite enrollments hold seats for 35 minutes (the 30-minute session plus slack); approved paid ones have 72 hours to pay.
+  - Dev: set `STRIPE_WEBHOOK_SECRET` to the `whsec_…` that `bun run stripe:listen` prints (the Stripe CLI needs the events named; the script lists the six events the webhook handles).
+  - Stripe setup, from creating a sandbox and a restricted key to the production webhook endpoint: `docs/stripe.md`.
+- **Refunds** (`apps/payment`, table `refunds`) are whole-order and cancel the enrollment (`cancelled`, `markCancelled()`), which frees its seats and invitation.
+  - The buyer (`POST /refunds`) gets the policy's percent until `starts_at − cutoff`. The policy is the one snapshotted onto `enrollments.refund_percent` / `refund_cutoff_hours` at enroll time, and `refundTerms()` in `@app/tickets` is the one place that reads it.
+  - The organizer or an admin (`POST /enrollments/:id/refund`) refunds 100% at any time.
+  - `issueRefund()` (`src/libs/refund.ts`) uses the idempotency key `refund-<paymentId>`, so a payment is refunded at most once. Stripe refunds are async (PromptPay starts at `requires_action`, and a card refund can fail later), so `refund.updated` / `refund.failed` keep `refunds.status` current.
+- Enrollments keep their event, ticket type and invitation with `ON DELETE RESTRICT`, so those services answer `EVENT_HAS_ENROLLMENTS`, `TICKET_TYPE_IN_USE` and `INVITATION_USED` instead.
+- Design, lifecycle diagrams and failure modes: `docs/tickets.md`.
+
+### Frontend: `apps/web`
+
+- **shadcn on Base UI:** the style is `base-maia`, so primitives come from `@base-ui/react`, not Radix. Use Base UI APIs (e.g. the `render` prop instead of `asChild`). The `migrate-radix-to-base` skill covers translating Radix-style examples. For a link styled as a button, apply `buttonVariants()` to a router `Link`, as `navbar.tsx` does. Load the `shadcn` skill before UI work.
+- **Components:** always look for a shadcn component first (shadcn MCP / registry). If none fits the feature or design, create one in `src/components/` that follows shadcn theming. That means function components with `data-slot`, `cva` variants, `cn()` for class merging (`cn` comes from the `cn` package, re-exported by `@/lib/utils`), and theme tokens only (`bg-primary`, `text-muted-foreground`, `border`, `ring`, …), with no raw palette colors. Tokens live in `src/index.css` (oklch values for `:root` and `.dark`, teal primary, Google Sans). Dark mode is class-based (`.dark`).
+- **Icons (lucide-react) are required:** put one in every button, form field label, section/card heading, nav item and empty state. Inside `Button`, mark them with `data-icon="inline-start"` or `"inline-end"` so the padding adjusts. Leave out size classes, because `Button` sizes child SVGs itself.
+- **Routing:** file-based routes live in `src/routes/` and export `Route = createFileRoute(...)`. `src/routeTree.gen.ts` is generated by the router Vite plugin, so never edit it by hand. Use `@/` for imports from `src`.
+- **Server state:** fetch all server state with TanStack Query through the Eden clients. Don't use raw `fetch`.
+- **Auth in the web:** the Better Auth client is `auth` in `src/lib/auth-client.ts`; `authClient` in `api.ts` stays the Eden treaty for the auth service.
+  - Read the session with `useSession()` / `sessionQueryOptions` from `src/lib/session.ts`. Pages that need a user go under `src/routes/_authed/`, whose `beforeLoad` redirects to `/login?redirect=`. Role checks use `hasRole()` in `beforeLoad`.
+  - Map Better Auth errors to Thai with `authErrorMessage()`, and our services' problem documents with `problemMessage()`.
+- **Toasts:** this is a Base UI project, so use `toast.add()` from `@/components/ui/toast`, not sonner.
+- **Forms:** follow https://ui.shadcn.com/docs/forms/tanstack-form, using `@tanstack/react-form` + zod.
+  - Pass the schema as `useForm({ validators: { onSubmit: schema } })`.
+  - Each `form.Field` render function returns `<Field data-invalid>` → `<FieldLabel htmlFor>` → a control with `aria-invalid` → `<FieldError errors={field.state.meta.errors}>`.
+  - Show the error only when `isTouched && !isValid`.
+  - The `<form onSubmit>` calls `e.preventDefault()` and then `form.handleSubmit()`.
+  - For text inputs and textareas, `TextField` and `SubmitButton` in `src/components/form-field.tsx` already render this structure (with the label icon and pending spinner).
+- **Tables:** follow https://ui.shadcn.com/docs/components/base/data-table, using `@tanstack/react-table` (v9).
+  - `columns.tsx` holds the column defs and the row-action dropdown (route-local ones live in a `-components/` folder, which the router ignores).
+  - `data-table-features.ts` holds the shared features object.
+  - `data-table.tsx` is the generic table.
+  - The route fetches data via Query.
+- **Hotkeys:** use `@tanstack/react-hotkeys` (`useHotkey("Mod+S", …)`; the event editor's save bar is the example).
+- **Drag to reorder:** `@dnd-kit/react` (`DragDropProvider` + `useSortable`, with `isSortable(source)` in `onDragEnd` feeding TanStack Form's `field.moveValue`). The ticket-type question builder is the example; it collapses the other items while dragging because they differ a lot in height.
+
+## Cloud infrastructure (the graded half)
+
+This is the **Cloud Computing 2026 term project** (IT KMITL): graded on both the app and
+the infra, with a report and a live demo. The v2 app above was merged onto the existing
+infra on 2026-10-24 — spec `docs/superpowers/specs/2026-10-24-v2-infra-merge-design.md`,
+plan `docs/superpowers/plans/2026-10-24-v2-infra-merge.md`.
+
+**State:** **one Terraform root, `infra/terraform/`, one state** (`README.md` there):
+permanent resources at the root (7 ECR repos, uploads S3 bucket + `public/*` read policy,
+SQS mail queue + DLQ, optional `eventide/{google-oauth,stripe,gmail}` secrets, optional
+Route 53 zone + ACM cert) and the nightly platform in `modules/platform` (raw
+`aws_eks_cluster` + node group, `db.t3.micro` RDS with ONE database `eventide`, Terraform
+NLB → ingress-nginx NodePort) plus the ingress-nginx / metrics-server Helm releases, all
+behind `var.platform` (`make up` = true, `make down` = false). **Credentials go in ONE
+place: `infra/aws.env`** (copy of `infra/aws.env.example`; gitignored; sourced by every
+Make target and script). `infra/helm/eventide` (auth, event, registration, payment,
+mail-worker, redis, web, `/files` → S3, db-migrate hook) ·
+`scripts/{tf-init,deploy,teardown,k3d-up,k3d-down,admin,check-lab}.sh`. The k3d parity
+GATE passed locally; **the v2 layout has not been applied to AWS yet** — next lab session:
+paste creds → `bash scripts/check-lab.sh` → `dns.auto.tfvars` with the real domain →
+`make up` (tf-init carries the old `10-foundation` state over once) → `make deploy` →
+`make down`.
+
+### Read these before doing anything
+
+| File | Role |
+|---|---|
+| `docs/SYSTEM-DESIGN.md` | **What** is being built — architecture, services, security, IaC layout. §1.1 lists what the v2 merge changed. |
+| `docs/PROJECT-KNOWLEDGE-BASE.md` | **Why** — decision log (with superseded rows), verified lab constraints, trap table, report talking points. |
+| `docs/TODO.md` | The build checklist. **`GATE`** items must pass before the next step; cut from the bottom, never a GATE. §0.6 is the current work. |
+| `docs/{auth,storage,stripe,tickets}.md` | The v2 app's own design notes. |
+| `docs/lab-probe-2026-09-0{6,7}.txt` | Raw output of the AWS Learner Lab capability probes. |
+
+Do not re-litigate decisions recorded in the knowledge-base decision log. If a change
+contradicts one, flag it against that entry.
+
+### The governing principle
+
+> Get a hello-world pod answering HTTP on real EKS, deployed by Terraform, before writing a
+> single feature.
+
+Infrastructure does not compress under deadline pressure; features do.
+
+### Environment constraints (probed live against AWS account 735838417080, us-east-1)
+
+These are hard and load-bearing — most odd design choices trace back to one of them:
+
+- **$50 hard cap.** Exceeding it locks the account and deletes all work. `~$1.10` per 4-hour
+  session; leaving the platform layer up exhausts the budget in ~15 days.
+- **`make down` (`terraform apply -var platform=false`) at the end of every session.**
+  The lab auto-stops EC2 only; RDS, the EKS control plane and ELBs keep billing. Worker
+  nodes are in an ASG that relaunches lab-stopped instances.
+- **No IRSA** (`iam:CreateOpenIDConnectProvider` denied) — also no GitHub Actions OIDC, so
+  CI checks + builds only and deploy is a local script. Pods get the lab **session
+  credentials** (S3 + SQS) through the `eventide-common` Secret; they expire with the
+  session — `make deploy` every session.
+- **No `iam:CreateRole`** — Terraform reuses the lab's `LabEksClusterRole` / `LabEksNodeRole`
+  via `data "aws_iam_roles"` + `name_regex`. Never hardcode the ARNs.
+- **Default VPC only, no NAT gateway.** Subnets pinned to **us-east-1a/b/c**.
+- **An org SCP denies `s3:GetBucketObjectLockConfiguration`** — every bucket is CLI-created
+  (`terraform_data` + `local-exec`) and consumed via `data "aws_s3_bucket"`; config goes in
+  granular `aws_s3_bucket_*` resources. See `infra/terraform/s3.tf`.
+- **`iam:GetRole` on `voclabs` is denied** — rules out `terraform-aws-modules/eks`. Raw
+  `aws_eks_*` resources only.
+- **Unprobed (probed by `scripts/check-lab.sh` next session):** `sqs:*` and the account-level
+  S3 Public Access Block. Fallbacks: an ElasticMQ pod / streaming `/files/*` through `event`.
+- Session credentials expire with the 4-hour session. **Never start an EKS apply after hour 3.**
+- Re-run `bash scripts/check-lab.sh` after any lab reset — role suffixes and permissions change.
+
+### Infra architecture in brief
+
+- **One RDS `db.t3.micro`, one database `eventide`, one role.** The v2 schema is a single
+  Drizzle schema with cross-table FKs. Migrations = the chart's `db-migrate` pre-install/
+  pre-upgrade hook (`packages/db/Dockerfile`, `drizzle-kit migrate`) — every `make deploy`
+  migrates before pods roll. `DB_POOL_MAX=4` per pod (≈ 87 connections on `t3.micro`).
+- **Auth across services** = Better Auth cookie session; `@app/auth-guard` introspects
+  `AUTH_SERVICE_URL` (in-cluster `auth` Service) and caches 60 s in the **`redis` pod** (no
+  persistence; losing it is one slow request, never a wrong one).
+- **Uploads** go through the owning service; the browser reads `/files/<key>`, which a
+  second Ingress rewrites to the bucket on S3 (`values.aws.yaml`) or MinIO (`values.local.
+  yaml`). Only `public/*` is readable — the bucket policy decides, not the ingress.
+- **Mail** = `@app/mail` → SQS `eventide-mail-queue` → `mail-worker` Deployment → Gmail
+  SMTP. Without `eventide/gmail` it runs dry and logs. **Payment** = Stripe; without
+  `eventide/stripe` checkout is off. Both are Terraform-managed from gitignored
+  `*.auto.tfvars` in `infra/terraform`.
+- **ingress-nginx as a `NodePort` Service + an NLB created by Terraform** (never
+  `type=LoadBalancer` — that ELB would orphan outside Terraform state).
+- **Secrets** — `scripts/deploy.sh` builds four k8s Secrets each session: `eventide-common`
+  (DATABASE_URL, S3_*, AWS_* session creds, MAIL_QUEUE_URL), `eventide-auth`
+  (BETTER_AUTH_SECRET, GOOGLE_*), `eventide-payment` (STRIPE_*), `eventide-mail-worker`
+  (GMAIL_*). Same chart on k3d with dev values. **ESO stays off** (SYSTEM-DESIGN §5.2.1).
+- **One Terraform root, split by `var.platform`:** permanent resources at the root,
+  the nightly EKS/RDS/NLB in `modules/platform` with `count = var.platform ? 1 : 0`.
+  `make down` is `terraform apply -var platform=false` — a normal apply that destroys
+  exactly the platform. The state bucket is created by `scripts/tf-init.sh`.
+- **DNS/TLS:** `events.<domain>` delegated to Route 53, apex on Cloudflare; zone + wildcard
+  ACM cert are permanent (`infra/terraform/dns.tf`, opt-in via `dns.auto.tfvars`); the NLB
+  TLS listener + ALIAS record rebuild with the platform. Single host — SPA at `/`, APIs at `/api/*`,
+  files at `/files/*`, no CORS. Stripe's webhook and Google's redirect URI both need this
+  HTTPS host. Never recreate the hosted zone.
+
+### Infra commands
+
+`make dev` (compose + migrate + every app in watch mode) · `make db-reset` · `make k3d` /
+`make k3d-down` (local parity: same chart, host compose stack) · `make up` (`tf-init` +
+`terraform apply` + kubeconfig) · `make plan` · `make deploy` (`scripts/deploy.sh`: 7 images
+→ ECR, Secrets, helm upgrade with the migrate hook) · `make admin EMAIL=…` (first admin,
+after registering in the web) · `make load BASE_URL=…` (k6 vs `/api/events`) · `make down`
+(`teardown.sh`: `platform=false` + proof — every session end). Credentials: `infra/aws.env`.
+`bash scripts/check-lab.sh` after every lab reset. CI (`.github/
+workflows/ci.yml`) runs the compose-backed tests, the web build and all 7 image builds —
+no AWS.
+
+### Rules that cause slow, confusing bugs if broken
+
+- **Probes hit `GET /api/<prefix>/health`, which must never touch Postgres or Redis.** A
+  liveness probe that queries the DB turns a 5-second RDS blip into every pod restarting.
+- **`/files/*` is public only under `public/*`.** Never store a private file with a
+  `public/` key; never widen the bucket policy.
+- **Never break an Elysia method chain** — Eden Treaty's end-to-end types depend on it; a
+  broken chain silently degrades the SPA's types to `any`.
+- **Request models are Elysia `t` / TypeBox only** (`model.ts`). Zod stays in the web forms.
+- **`DB_POOL_MAX`** is the only per-pod DB knob; raising replicas without lowering it exhausts
+  `t3.micro`'s ~87 connections and fails the HPA load test on connections, not CPU.
+- Bun services must **handle `SIGTERM`** (mail-worker already does; Elysia's `listen` does).
+- RDS: `skip_final_snapshot = true`, `deletion_protection = false`, or the nightly destroy fails.
+- HPA max is **8 replicas** — a `t3.medium` allows only 17 pods; beyond the ceiling pods sit
+  `Pending` with an error that looks like a bug. Run the load test with
+  `NODE_INSTANCE_TYPE=t3.medium make up`.
+- Image size floor is Bun 1.4's `--compile` runtime (~104 MB per binary); the migrate image
+  is ~250 MB. Pushing over a VPN has stalled before — push off-VPN or lower the MTU.
+
+### Open blockers (see `docs/TODO.md` §0)
+
+1. The **assignment brief has never been seen** — every scope decision is inference.
+2. Exact **checkpoint date** and what it requires.
+3. **Final demo date.**
+4. The **real domain** for `infra/terraform/dns.auto.tfvars` (decided 2026-10-24: a real
+   domain, applied in the next lab session).
+
+### Security
+
+Paste script *output* into chats, never `aws_secret_access_key` / `aws_session_token`. Live
+lab credentials were pasted into a chat on 2026-09-06; the session was rotated afterward.
+Never commit `.env`, `infra/aws.env` or `*.auto.tfvars`.

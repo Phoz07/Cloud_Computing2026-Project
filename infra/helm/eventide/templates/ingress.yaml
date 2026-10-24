@@ -5,6 +5,10 @@ metadata:
   namespace: {{ .Values.namespace }}
   labels:
     app.kubernetes.io/part-of: eventide
+  annotations:
+    # Multipart uploads go through the services (packages/storage); the default 1m
+    # would 413 every cover image.
+    nginx.ingress.kubernetes.io/proxy-body-size: {{ .Values.ingress.proxyBodySize | quote }}
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   rules:
@@ -18,7 +22,7 @@ spec:
               service:
                 name: {{ $name }}
                 port:
-                  number: 80
+                  number: {{ $svc.servicePort | default 80 }}
           {{- end }}
           {{- end }}
       {{- if .Values.ingress.host }}

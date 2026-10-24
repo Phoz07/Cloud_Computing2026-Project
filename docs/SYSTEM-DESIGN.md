@@ -40,6 +40,29 @@ more logical database.
 
 ---
 
+## 1.1 Changed in the v2 merge (2026-10-24)
+
+The finished v2 app (`suwizx/…@v2`, 17 commits) replaced the V2-plan services on 2026-10-24
+and the infra was adapted to it — spec: `docs/superpowers/specs/2026-10-24-v2-infra-merge-design.md`,
+plan: `docs/superpowers/plans/2026-10-24-v2-infra-merge.md`. Where a section below
+contradicts this table, this table wins; the sections are kept as the design record.
+
+| Area | This document assumed | The v2 app does | What the infra does now |
+|---|---|---|---|
+| Database | 4 DBs + 4 roles, `db-bootstrap` Job | **one** DB, one `DATABASE_URL`, cross-table FKs | RDS `db_name = eventide`; chart `db-migrate` pre-upgrade hook (`drizzle-kit migrate`); master creds; `DB_POOL_MAX=4` |
+| Auth between services | JWKS + bearer, stateless | cookie session; `@app/auth-guard` introspects `AUTH_SERVICE_URL`, caches 60 s in Redis | in-cluster `auth` Service; `redis` pod (no persistence) |
+| Uploads | presigned PUT, bytes never in the cluster | multipart through the owning service; browser reads `/files/<key>` | `/files/(.*)` Ingress → S3 path-style (`values.aws.yaml`) / MinIO (`values.local.yaml`); bucket policy `public/*` read; `proxy-body-size: 20m` |
+| Mail | none | `@app/mail` → SQS → `apps/mail-worker` → Gmail SMTP | `10-foundation/sqs.tf` (queue + DLQ, redrive 5); `mail-worker` Deployment; `eventide/gmail` optional |
+| Payment | mock | Stripe Checkout + `/api/payment/webhook` + refunds | `eventide/stripe` optional; webhook needs the HTTPS domain (§5.5.1) |
+| Health | `/health/live`, `/health/ready` | `GET /api/<prefix>/health` → `โอเค`, no I/O | probe paths per service; same liveness rule |
+| Ports / prefixes | 3000; many prefixes | `/api/auth`, `/api/events`, `/api/regis`, `/api/payment` | Ingress paths; `PORT=3000` |
+| Secrets | per-service Secrets Manager placeholders (for ESO) | one root `.env` | `deploy.sh` builds `eventide-{common,auth,payment,mail-worker}` k8s Secrets each session; `eventide/{google-oauth,stripe,gmail}` optional in `10-foundation` |
+| Tooling | Turborepo, `@eventide/*` | Bun workspaces, `@app/*`, compose with Postgres 18 / Redis / ElasticMQ / MinIO | Makefile, CI, Dockerfiles rewritten; images ~110 MB (Bun 1.4 compile floor) |
+
+Unchanged: Terraform split by lifetime, raw `aws_eks_*`, NodePort ingress-nginx + Terraform
+NLB, nightly `20-platform` destroy, no IRSA / no ESO / no CloudFront, HPA on `event`, k3d
+parity with the same chart, DNS/TLS design (§5.5.1).
+
 ## 2. Architecture
 
 ```
@@ -206,6 +229,8 @@ Every service exposes:
 
 ## 4. Data design
 
+> **Superseded in part by the v2 merge — see §1.1** (single database / cookie sessions + Redis cache / uploads through the service + `/files` from S3). Kept as the design record.
+
 ### 4.1 One RDS instance, one database per service
 
 ```
@@ -362,6 +387,8 @@ integration would add marks for nothing the design doesn't already show.
 ---
 
 ## 5. Security and secrets
+
+> **Superseded in part by the v2 merge — see §1.1** (single database / cookie sessions + Redis cache / uploads through the service + `/files` from S3). Kept as the design record.
 
 ### 5.1 Authentication — better-auth, JWT plugin, bearer plugin
 
@@ -614,6 +641,8 @@ early in week 2**, not in demo week.
 
 ## 6. Object storage
 
+> **Superseded in part by the v2 merge — see §1.1** (single database / cookie sessions + Redis cache / uploads through the service + `/files` from S3). Kept as the design record.
+
 Cover images use **presigned URLs**, not proxying:
 
 1. Browser asks `event` for an upload URL.
@@ -631,6 +660,8 @@ budget most of a day for it.
 ---
 
 ## 7. Infrastructure as code
+
+> **Superseded in part 2026-10-24:** the three-layer split (`00-bootstrap` / `10-foundation` / `20-platform`) collapsed into ONE root, `infra/terraform/`, with the nightly EKS/RDS/NLB in `modules/platform` behind `var.platform` (`make down` = `apply -var platform=false`). Same lifetimes, one state, one `apply`; credentials only in `infra/aws.env`. See `infra/terraform/README.md`.
 
 Terraform is split **by lifetime, not by resource type**:
 

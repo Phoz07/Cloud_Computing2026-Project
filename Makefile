@@ -1,56 +1,45 @@
-.PHONY: dev db bootstrap db-reset seed smoke seed-eks up deploy down k3d k3d-down load help
+.PHONY: dev db-reset tf-init up plan deploy admin load down k3d k3d-down help
 
-TF_PLATFORM := terraform -chdir=infra/terraform/20-platform
+# Learner Lab credentials live in infra/aws.env (copy infra/aws.env.example).
+# Every AWS target sources it; Terraform and the AWS CLI read the same variables.
+AWSENV := set -a; [ -f infra/aws.env ] && . infra/aws.env; set +a;
+TF := terraform -chdir=infra/terraform
 
 help: ## list targets
-	@grep -hE '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*## /\t/' | sort
+	@grep -hE '^[a-z0-9-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*## /\t/' | sort
 
 # --- inner loop (local) ---------------------------------------------------
-db: ## start the local Postgres container
-	docker compose up -d db
+dev: ## compose (postgres/redis/elasticmq/minio) + migrate + every app in watch mode
+	bun run infra:up && bun run db:migrate && bun run dev
 
-bootstrap: db ## create the 4 service DBs + roles, run drizzle migrations
-	@printf 'waiting for postgres'; \
-	until docker compose exec -T db pg_isready -U postgres >/dev/null 2>&1; do printf '.'; sleep 1; done; \
-	echo
-	bun run --filter @eventide/db db:bootstrap
-
-db-reset: ## discard local database data, recreate all 4 databases, and migrate
-	docker compose down -v
-	$(MAKE) bootstrap
-
-dev: bootstrap ## postgres + the 4 services in watch mode
-	bun run dev
-
-seed: ## demo seed LOCAL (admin + organisers + attendees, 12 events, sample purchases) — needs `make dev` up
-	bun run --filter @eventide/db db:seed
-
-smoke: ## end-to-end persona smoke test — needs `make dev` up and `make seed` run
-	bun scripts/smoke.ts
-
-seed-eks: ## demo seed the DEPLOYED cluster (in-cluster one-off pod — RDS is private)
-	bash scripts/seed.sh
+db-reset: ## wipe the compose volumes, recreate the database, migrate
+	bun run infra:reset && bun run db:migrate
 
 # --- AWS: session lifecycle --------------------------------------------
-# NODE_INSTANCE_TYPE=t3.medium for the week-4 HPA-to-8 load test (t3.small's
-# ~11-pod ceiling is too tight); default t3.small keeps EC2 cost down otherwise.
-up: ## apply 20-platform (EKS + RDS + NLB + ingress-nginx), point kubectl at it
-	$(TF_PLATFORM) init -input=false
-	$(TF_PLATFORM) apply -auto-approve $(if $(NODE_INSTANCE_TYPE),-var node_instance_type=$(NODE_INSTANCE_TYPE))
-	aws eks update-kubeconfig --region us-east-1 --name eventide
-	kubectl get nodes
+# NODE_INSTANCE_TYPE=t3.medium for the HPA-to-8 load test (t3.small's ~11-pod
+# ceiling is too tight); default t3.small keeps EC2 cost down otherwise.
+tf-init: ## create the state bucket if missing + terraform init (idempotent; `up` runs it)
+	$(AWSENV) bash scripts/tf-init.sh
 
-deploy: ## build+push the service images to ECR, helm upgrade the eventide chart, roll out
-	bash scripts/deploy.sh
+up: tf-init ## terraform apply — permanent layer + EKS + RDS + NLB + ingress-nginx; point kubectl at it
+	$(AWSENV) $(TF) apply -auto-approve -input=false $(if $(NODE_INSTANCE_TYPE),-var node_instance_type=$(NODE_INSTANCE_TYPE))
+	$(AWSENV) aws eks update-kubeconfig --region us-east-1 --name eventide
+	$(AWSENV) kubectl get nodes
 
-db-bootstrap: ## create the 4 RDS databases + roles + run migrations (one-shot Job)
-	bash scripts/db-bootstrap.sh
+plan: ## terraform plan (no changes)
+	$(AWSENV) $(TF) plan -input=false
+
+deploy: ## build+push the 7 images to ECR, create the k8s Secrets, helm upgrade (migrates first), roll out
+	$(AWSENV) bash scripts/deploy.sh
+
+admin: ## promote a registered user to admin on the running cluster — make admin EMAIL=you@example.com
+	$(AWSENV) bash scripts/admin.sh $(EMAIL)
 
 load: ## k6 autoscaling load test vs /api/events — pass BASE_URL=http://<nlb-dns>
 	BASE_URL="$(BASE_URL)" k6 run load/k6/events.js
 
-down: ## destroy 20-platform and verify nothing survived — run at EVERY session end
-	bash scripts/teardown.sh
+down: ## terraform apply platform=false (EKS/RDS/NLB gone, ECR/S3/SQS/DNS stay) + verify — run at EVERY session end
+	$(AWSENV) bash scripts/teardown.sh
 
 # --- local parity: k3d running the same Helm chart as EKS ------------
 k3d: ## local k3d cluster + ingress-nginx + the eventide chart (values-local)

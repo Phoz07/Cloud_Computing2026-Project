@@ -1,266 +1,202 @@
-# Eventide — Cloud Computing 2026 (IT KMITL)
+# Eventide
 
-An event-listing / ticket-registration platform, built as the term project for Cloud
-Computing 2026. Graded on **both** the application and the cloud infrastructure, with a
-written report and a live demo — so the app is deliberately small and the infrastructure
-does the talking.
+เว็บไซต์ขายและจัดการตั๋วอีเวนต์ สร้างเป็น monorepo ของ microservices บน [Bun](https://bun.com)
 
-Three independently deployed Elysia/Bun microservices on EKS, one static React SPA served
-from the cluster, one RDS Postgres with a database per service, TLS via Route 53 + ACM on
-a Terraform-managed NLB.
+- **หน้าเว็บ** เป็น React SPA ที่เรียก service ผ่าน Eden Treaty จึงได้ type จาก backend ถึง frontend โดยไม่ต้องเขียน API client เอง
+- **แต่ละโดเมนเป็น service ของตัวเอง** (auth, event, registration, payment) แยก process และ port แต่ใช้ Postgres ก้อนเดียวกัน
+- **งานที่ไม่ต้องรอ** อย่างการส่งอีเมล ส่งผ่านคิว SQS ให้ worker ทำ ไฟล์เก็บใน S3
 
-| Doc | What's in it |
+## ความสามารถ
+
+| บทบาท | ทำอะไรได้ |
 |---|---|
-| [`docs/SYSTEM-DESIGN.md`](docs/SYSTEM-DESIGN.md) | **What** is being built — architecture, data model, security, IaC layout |
-| [`docs/PROJECT-KNOWLEDGE-BASE.md`](docs/PROJECT-KNOWLEDGE-BASE.md) | **Why** — decision log, verified lab constraints, trap table |
-| [`docs/TODO.md`](docs/TODO.md) | The 4-week build checklist |
-| [`CLAUDE.md`](CLAUDE.md) | Guardrails and current state |
+| ผู้ใช้ (`user`) | ค้นหาอีเวนต์ตามคำค้น หมวดหมู่ หรือผู้จัดงาน, ลงทะเบียนและชำระเงิน, ดูตั๋วพร้อม QR code, แก้โปรไฟล์, สมัครเป็นผู้จัดงาน |
+| ผู้จัดงาน (`organizer`) | สร้างอีเวนต์ (ปก, แกลเลอรี, รายละเอียดแบบ rich text, ตั้งเวลาเผยแพร่), สร้างประเภทตั๋วและแบบฟอร์มลงทะเบียน, เชิญผู้เข้าร่วมทางอีเมล, อนุมัติหรือปฏิเสธการลงทะเบียน, ดูรายชื่อผู้เข้าร่วม ทำได้เฉพาะอีเวนต์ของตัวเอง |
+| ผู้ดูแลระบบ (`admin`) | จัดการทุกอีเวนต์และหมวดหมู่, ระงับอีเวนต์หรือบัญชี, จัดการบัญชีผู้ใช้, อนุมัติใบสมัครผู้จัดงาน |
 
-## AWS Diagram
+**ประเภทตั๋ว** มีสามแบบ:
 
-<img width="5999" height="2884" alt="aws_diagram2" src="https://github.com/user-attachments/assets/bfcf495c-9ead-458f-bfa3-aea2f14abbe8" />
+- `first_come`: มาก่อนได้ก่อนตามโควตา
+- `approval`: ผู้จัดอนุมัติทีละคน
+- `invite`: เฉพาะอีเมลที่ได้รับเชิญ
 
-## Status
+ตั๋วฟรีหรือมีราคาก็ได้ ตั๋วที่มีราคาจ่ายผ่าน Stripe Checkout ถ้าเงินเข้าหลังที่นั่งหมด ระบบจะคืนเงินให้เอง
 
-All three services + the SPA are built, containerised, and deployed to real EKS via one
-Helm chart; every week-1–4 GATE has passed on the deployed system (rebuild-from-zero,
-DB-per-service boundary, S3 presigned upload, HPA 2→8→2). **Left:** apply the Route 53 /
-ACM custom domain and wire the Google OAuth client (both plumbed, need a lab session +
-external accounts), then the demo rehearsals. See [`docs/TODO.md`](docs/TODO.md).
+**ยังไม่เสร็จ:** เช็คอินผู้เข้าร่วม และหน้าคำขอคืนเงินใน dashboard
 
-## Repository layout
+## สถาปัตยกรรม
+
+```mermaid
+flowchart LR
+  B["Browser"] --> V["apps/web<br/>Vite :5173"]
+  V -->|"/api/auth"| A["auth :3001"]
+  V -->|"/api/events"| E["event :3002"]
+  V -->|"/api/regis"| R["registration :3003"]
+  V -->|"/api/payment"| P["payment :3004"]
+  V -->|"/files"| S3[("S3 / MinIO")]
+  E -.->|"ตรวจ session"| A
+  R -.->|"ตรวจ session"| A
+  P -.->|"ตรวจ session"| A
+  E & R & P -.->|"cache session 60s"| RD[("Redis")]
+  P <--> ST["Stripe"]
+  A & E & R & P --> PG[("Postgres")]
+  A & E & R & P --> Q[["SQS mail-queue"]]
+  Q --> M["mail-worker"] --> G["Gmail SMTP"]
+```
+
+- **Routing:** ตอน dev, Vite proxy แต่ละ path prefix ไปยัง port ของ service นั้น
+- **Session:** service อื่นตรวจ session โดยส่ง cookie ไปถาม `apps/auth` แล้ว cache คำตอบใน Redis 60 วินาที รายละเอียดอยู่ใน [docs/auth.md](docs/auth.md)
+
+| Workspace | Port | Prefix | หน้าที่ |
+|---|---|---|---|
+| `apps/web` | 5173 | | React SPA |
+| `apps/auth` | 3001 | `/api/auth` | Better Auth: บัญชี, session, บทบาท, การระงับ, ใบสมัครผู้จัดงาน |
+| `apps/event` | 3002 | `/api/events` | อีเวนต์, หมวดหมู่, รูปภาพ, คำเชิญ, ประเภทตั๋วและแบบฟอร์ม |
+| `apps/registration` | 3003 | `/api/regis` | ที่นั่งว่าง, การลงทะเบียน (อนุมัติ / ปฏิเสธ), ตั๋วของฉัน |
+| `apps/payment` | 3004 | `/api/payment` | Stripe Checkout, webhook, การคืนเงิน |
+| `apps/mail-worker` | | | อ่านคิว `mail-queue` แล้วส่งอีเมลผ่าน Gmail |
+
+| Package | หน้าที่ |
+|---|---|
+| `@app/db` | Drizzle schema, migration และ client ที่ทุก service ใช้ร่วมกัน |
+| `@app/auth-guard` | บทบาทและสิทธิ์ (ใช้ใน web ด้วย), plugin `authGuard` ของ Elysia |
+| `@app/mail` | สัญญาของคิวอีเมล: `enqueueMail()` และ `parseMailMessage()` |
+| `@app/storage` | อัปโหลดไฟล์ลง S3 พร้อมตรวจชนิดและขนาดไฟล์ |
+| `@app/tickets` | ออกตั๋วร่วมกันระหว่าง registration และ payment |
+
+**Stack:**
+
+| ส่วน | เทคโนโลยี |
+|---|---|
+| Frontend | React 19, Vite, TanStack Router / Query / Form / Table, shadcn/ui บน Base UI, Tailwind CSS 4 |
+| Backend | ElysiaJS 2, Better Auth |
+| ข้อมูล | Drizzle ORM บน Postgres 18, Redis 8 |
+| ไฟล์และคิว | S3 (MinIO ตอน dev), SQS (ElasticMQ ตอน dev) |
+| ภายนอก | Stripe, Gmail SMTP ผ่าน Nodemailer |
+
+## เริ่มต้นใช้งาน
+
+ต้องมี [Bun](https://bun.com) 1.4 ขึ้นไป และ Docker (พร้อม Compose)
+
+```sh
+bun install
+cp .env.example .env        # ทุก workspace อ่าน .env ที่ root
+```
+
+เปิด `.env` แล้วใส่ `BETTER_AUTH_SECRET` (สร้างด้วย `openssl rand -base64 32`) ค่าอื่นใช้ค่าเริ่มต้นได้เลย
+
+```sh
+bun run infra:up            # Postgres, Redis, ElasticMQ, MinIO
+bun run db:migrate
+bun run dev                 # web + ทุก service + mail worker
+```
+
+1. เปิด http://localhost:5173 แล้วสมัครสมาชิก
+2. ตั้งบัญชีแรกเป็นผู้ดูแลระบบ แล้ว reload หน้าเว็บ:
+
+   ```sh
+   cd apps/auth && bun run admin:promote you@example.com
+   ```
+
+3. สร้างหมวดหมู่ที่ `/dashboard/categories` ก่อน เพราะอีเวนต์ทุกอันต้องมีหมวดหมู่
+
+หน้า `/status` แสดงสถานะของทุก service
+
+### ตัวเลือกเสริม
+
+ส่วนนี้ไม่ต้องตั้งก็รันได้
+
+| ฟีเจอร์ | ตั้งค่า | ถ้าไม่ตั้ง |
+|---|---|---|
+| เข้าสู่ระบบด้วย Google | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (redirect URI: `http://localhost:5173/api/auth/callback/google`) | มีแค่อีเมลและรหัสผ่าน |
+| ชำระเงิน | `STRIPE_SECRET_KEY` (sandbox key) และ `STRIPE_WEBHOOK_SECRET` จาก `bun run stripe:listen` ดูขั้นตอนใน [docs/stripe.md](docs/stripe.md) | ตั๋วฟรีใช้ได้ แต่ตั๋วที่มีราคาจ่ายเงินไม่ได้ |
+| ส่งอีเมลจริง | `GMAIL_USER`, `GMAIL_APP_PASSWORD` ([App Password](https://myaccount.google.com/apppasswords)) | mail worker พิมพ์อีเมลลง log แทนการส่ง |
+
+### บริการในเครื่อง
+
+| บริการ | ที่อยู่ | หมายเหตุ |
+|---|---|---|
+| Postgres 18 | `localhost:5432` | `bun run db:studio` เปิด Drizzle Studio |
+| Redis 8 | `localhost:6379` | |
+| ElasticMQ (SQS) | API `:9324`, UI http://localhost:9325 | คิว `mail-queue` และ `mail-dlq` |
+| MinIO (S3) | API `:9000`, console http://localhost:9001 | login `minioadmin` / `minioadmin`, bucket `event-assets` |
+
+`bun run infra:down` หยุดบริการ และ `bun run infra:reset` ล้างข้อมูลทั้งหมดแล้วเริ่มใหม่
+
+## คำสั่งที่ใช้บ่อย
+
+```sh
+bun run dev                         # ทุก app พร้อมกัน
+bun run --filter @app/event dev     # app เดียว
+
+bun run db:generate                 # สร้าง migration จาก schema ที่แก้ (packages/db/drizzle/)
+bun run db:migrate                  # รัน migration
+
+bun run --filter @app/web lint      # oxlint
+bun run --filter @app/web build     # tsc -b && vite build
+```
+
+**Type check:** รัน `bun check` จาก**ใน** workspace เช่น `cd apps/web && bun check` อย่ารันที่ root เพราะ tsconfig ที่ root ไม่มี DOM lib และ alias `@/*` จึงรายงาน error ที่ไม่มีจริงใน `apps/web`
+
+## การทดสอบ
+
+ใช้ `bun test` ชุดทดสอบที่ต้องใช้ฐานข้อมูลหรือ Redis ต้อง `bun run infra:up` ก่อน แล้วรันจากใน workspace:
+
+```sh
+cd apps/event && bun run test       # หรือ apps/auth, apps/registration, apps/payment,
+                                    # packages/auth-guard, packages/storage
+bun test test/event.test.ts         # ไฟล์เดียว
+bun test -t "pattern"               # เฉพาะเทสต์ที่ชื่อตรง
+```
+
+## โครงสร้างโปรเจกต์
 
 ```
 apps/
-  auth/           Elysia · better-auth (Drizzle + jwt + bearer), Google + email/password
-  event/          Elysia · event metadata, S3 presigned cover uploads
-  registration/   Elysia · tickets, capacity enforced in one local transaction
-  web/            Vite + React 19 + Tailwind v4 SPA, served from nginx in-cluster
+  web/            React SPA (TanStack Router แบบ file-based ใน src/routes/)
+  auth/           Better Auth
+  event/          อีเวนต์ หมวดหมู่ คำเชิญ ประเภทตั๋ว
+  registration/   การลงทะเบียนและตั๋ว
+  payment/        Stripe
+  mail-worker/    ส่งอีเมลจากคิว
 packages/
-  shared/         @eventide/shared — defineEnv (Zod), shared TypeBox models, bearer-JWT macro
-  db/             @eventide/db — Drizzle schemas + migrations, bootstrap + seed scripts
-docs/             design, knowledge base, TODO, report, demo runsheet
+  db/  auth-guard/  mail/  storage/  tickets/
 infra/
-  terraform/      00-bootstrap (README) · 10-foundation (ECR/S3/Secrets/DNS/OAuth) ·
-                  20-platform (EKS/RDS/NLB/ingress-nginx, + addons.tf)
-  helm/           ingress-nginx values · eventide/ (the app chart — all 4 services)
-  k8s/            raw manifests kept for reference (chart is the deploy path)
-scripts/          check-lab · db-bootstrap · deploy · seed · teardown · k3d-up / k3d-down
+  elasticmq/      ค่าตั้งคิวของ ElasticMQ สำหรับ docker-compose
+  terraform/      root เดียว: ECR, S3, SQS, secrets, DNS + modules/platform (EKS, RDS, NLB) สลับด้วย var.platform
+  aws.env.example ที่วาง credential ของ Learner Lab (copy เป็น aws.env)
+  helm/eventide/  Helm chart ของทั้งระบบ (ใช้ชุดเดียวกันทั้ง k3d และ EKS)
+scripts/          tf-init.sh · deploy.sh · teardown.sh · k3d-up.sh · admin.sh · check-lab.sh
+load/k6/          load test สำหรับ HPA
+docs/             เอกสารออกแบบ + รายงาน
 ```
 
-Each service follows the Elysia feature-module shape (`src/index.ts` root + a
-`src/modules/<domain>/{index,service,model}.ts` per domain). See
-[`SYSTEM-DESIGN.md` §12.2](docs/SYSTEM-DESIGN.md).
+แต่ละ service จัดโค้ดเป็น `src/routes/<feature>/{index,model,service}.ts`: controller, schema ของ request/response และ business logic
 
----
+## เอกสาร
 
-## Development setup
+- [docs/auth.md](docs/auth.md): การยืนยันตัวตน บทบาท และการตรวจสิทธิ์ข้าม service
+- [docs/tickets.md](docs/tickets.md): ประเภทตั๋ว วงจรการลงทะเบียน การล็อกที่นั่ง และการชำระเงิน
+- [docs/stripe.md](docs/stripe.md): ตั้งค่า Stripe ตั้งแต่ sandbox จนถึง webhook บน production
+- [docs/storage.md](docs/storage.md): การอัปโหลดและเก็บไฟล์
+- [CLAUDE.md](CLAUDE.md): ข้อตกลงในการเขียนโค้ดของโปรเจกต์ทั้งหมด
 
-### Prerequisites
+## Deploy (k3d / AWS)
 
-| Tool | Version | Why |
-|---|---|---|
-| [Bun](https://bun.sh) | ≥ 1.4 | runtime, package manager, test runner, bundler |
-| Docker | any recent | local Postgres for `make dev` |
-| GNU Make | any | task shortcuts (optional — commands work without it) |
+ระบบ deploy ขึ้น EKS บน AWS Academy Learner Lab ด้วย Terraform + Helm และรัน chart ชุดเดียวกันบน k3d ในเครื่องได้
 
-For the AWS/infra work you also need `awscli`, `terraform` (via `brew tap hashicorp/tap`
-— not in homebrew-core), `helm`, `kubectl`, and `jq`; `k3d` for local cluster parity and
-`k6` for the load test. Install list in **Deploying to AWS → Prerequisites** below.
+```sh
+make k3d          # k3d + ingress-nginx + chart ทั้งระบบ (ใช้ Postgres/MinIO/ElasticMQ จาก docker compose) → http://localhost:8080
+make k3d-down
 
-### First run
-
-```bash
-bun install          # installs all workspaces
-make dev             # postgres + bootstrap + the 3 services + the SPA, all in watch mode
+cp infra/aws.env.example infra/aws.env   # ครั้งเดียว แล้ววาง credential จาก Learner Lab (AWS Details → AWS CLI) ทุก session
+bash scripts/check-lab.sh   # หลัง Start Lab ทุกครั้ง
+make up           # terraform apply ทั้งหมด (ECR/S3/SQS/DNS + EKS + RDS + NLB + ingress-nginx) — root เดียว state เดียว
+make deploy       # build 7 images → ECR, สร้าง k8s Secrets, helm upgrade (migrate ก่อน), roll out
+make admin EMAIL=you@example.com   # ตั้ง admin คนแรก หลังสมัครผ่านหน้าเว็บ
+make down         # terraform apply -var platform=false (ลบ EKS/RDS/NLB, เก็บ ECR/S3/SQS/DNS) — ทำทุกครั้งก่อนจบ session
 ```
 
-`make dev` will:
-
-1. start a local Postgres container (`docker compose up -d db`),
-2. run `packages/db/scripts/bootstrap.ts` — creates the `auth_svc` / `event_svc` /
-   `registration_svc` roles and their databases, then applies the Drizzle migrations,
-3. `turbo run dev` — the three services (`bun --watch`) and the Vite dev server for `apps/web`.
-
-| Service | URL | Notes |
-|---|---|---|
-| auth | http://localhost:3000 | port 3000 is fixed — it's the Google OAuth redirect host |
-| event | http://localhost:3001 | |
-| registration | http://localhost:3002 | |
-| web (SPA) | http://localhost:5173 | started by `make dev` too; Vite proxies `/api/*` to the three services |
-
-Check one is up: `curl localhost:3001/health/live` → `{"status":"ok","service":"event"}`.
-Interactive API docs: `http://localhost:3001/swagger`.
-
-**Environment.** No `.env` is needed — `packages/shared` `defineEnv` supplies dev defaults
-that match `bootstrap.ts`. Google OAuth is **optional in dev**: email/password always works;
-set `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in `apps/auth/.env` only if you want the
-Google button (redirect URI `http://localhost:3000/api/auth/callback/google`).
-
-### Demo data
-
-```bash
-make seed        # needs `make dev` running — 4 organisers, 15 events,
-                 # 5 attendees with tickets, all through the live auth/registration APIs
-SEED_FORCE=1 make seed   # wipe and re-seed
-```
-
-### Without Make
-
-```bash
-docker compose up -d db
-bun run --filter @eventide/db db:bootstrap
-bun run dev                     # turbo run dev — the 3 services + the SPA
-```
-
-Run one workspace only: `bun run --filter @eventide/event dev`
-
-### Local Kubernetes parity (k3d)
-
-Run the **same Helm chart and manifests** as EKS on a local k3d cluster — catches
-manifest/ingress problems without a lab session or any cost:
-
-```bash
-make k3d          # scripts/k3d-up.sh — k3d cluster + ingress-nginx + the eventide chart
-                  # → http://localhost:8080  (curl localhost:8080/api/events)
-make k3d-down     # delete it
-```
-
----
-
-## Common commands
-
-```bash
-bun run lint            # biome check, all packages
-bun run check-types     # tsc --noEmit, all packages
-bun run test            # bun test, all packages
-bun run build           # compile each service to a Bun binary (dist/server)
-bun run format          # biome format --write
-
-# one package only
-bun run --filter @eventide/event check-types
-```
-
-`turbo` caches task results, so re-runs are near-instant until inputs change.
-
-### Database
-
-After changing a Drizzle schema in `packages/db/src/<svc>/schema.ts`:
-
-```bash
-bun run --filter @eventide/db generate:event          # or generate:registration
-make bootstrap                                         # re-applies migrations (idempotent)
-```
-
-`auth_db`'s schema is owned by the better-auth CLI, not drizzle-kit — do not hand-write it.
-
-Reset local data: `docker compose down -v && make bootstrap`.
-
-### Containers
-
-Build context is the **repo root**; build for the EKS node architecture:
-
-```bash
-docker build -f apps/event/Dockerfile --platform linux/amd64 -t eventide/event .
-docker run --rm -p 3000:3000 eventide/event
-curl localhost:3000/health/live
-```
-
-Images are a compiled Bun binary on `distroless/base-debian12` (~46 MB) — see
-[`SYSTEM-DESIGN.md` §12.1](docs/SYSTEM-DESIGN.md).
-
----
-
-## Deploying to AWS
-
-Deployment is a **local script run with fresh lab credentials** — the AWS Academy Learner
-Lab has no OIDC provider (so no GitHub Actions deploy) and session credentials expire in
-4 hours. Full rationale and the trap table: [`infra/terraform/README.md`](infra/terraform/README.md)
-and [`docs/PROJECT-KNOWLEDGE-BASE.md`](docs/PROJECT-KNOWLEDGE-BASE.md).
-
-### Prerequisites
-
-```bash
-brew tap hashicorp/tap
-brew install awscli hashicorp/tap/terraform helm kubectl jq   # k6 for the load test
-```
-
-Also: Docker running (image builds), and an AWS Academy Learner Lab (or any AWS account —
-override `account_id` / `region`, see `infra/terraform/*/README.md`).
-
-### One-time setup (per AWS account)
-
-| Step | Command | Creates |
-|---|---|---|
-| 1. State bucket | by hand — [`infra/terraform/00-bootstrap/README.md`](infra/terraform/00-bootstrap/README.md) | the S3 bucket holding Terraform state |
-| 2. Foundation | `terraform -chdir=infra/terraform/10-foundation init && terraform -chdir=infra/terraform/10-foundation apply` | ECR repos, uploads S3 bucket, `eventide/{auth,event,registration}` secrets — **permanent, never destroyed** |
-| 3. Custom domain *(optional)* | fill `10-foundation/dns.auto.tfvars`, re-apply, then paste `terraform output route53_name_servers` into your DNS host as `NS` records for the delegated subdomain | Route 53 zone + wildcard ACM cert for `events.<domain>` |
-| 4. Google OAuth *(optional)* | fill `10-foundation/google.auto.tfvars`, re-apply | `eventide/google-oauth` secret |
-
-Config files — **all gitignored, never committed:**
-
-| File | Purpose |
-|---|---|
-| `~/.aws/credentials` `[default]` | lab session creds (`aws_access_key_id` / `_secret_access_key` / `_session_token`). Paste from Learner Lab → *AWS Details*. **Into the file, never a chat/commit.** |
-| `infra/terraform/10-foundation/dns.auto.tfvars` | `dns_domain = "example.com"` — enables the Route 53 / ACM custom domain. Absent → deploy serves over the bare NLB (`http://<nlb>`). |
-| `infra/terraform/10-foundation/google.auto.tfvars` | `google_client_id` / `google_client_secret` from Google Cloud Console. Absent → auth runs email/password only. |
-
-`*.auto.tfvars.example` files next to each show the shape. `20-platform` needs no config —
-it reads the domain/cert from `10-foundation`'s state automatically.
-
-### Every session
-
-```bash
-# 1. Learner Lab → Start Lab → paste AWS creds into ~/.aws/credentials, then:
-aws configure set region us-east-1
-bash scripts/check-lab.sh          # role suffixes change on every lab reset — must pass
-
-# 2. Bring up the platform (~17 min: EKS + node group + RDS + NLB + ingress-nginx)
-make up                            # terraform apply 20-platform, then kubectl get nodes → 2 Ready
-
-# 3. Create the databases + roles + run migrations (one-shot Job, idempotent)
-make db-bootstrap
-
-# 4. Build + push all 4 images, helm upgrade, roll out
-make deploy                        # PUBLIC_URL defaults to the custom domain if DNS is set,
-                                   #   else http://<nlb>. Override: PUBLIC_URL=https://... make deploy
-
-# 5. Demo data (runs in-cluster — RDS is private)
-make seed-eks
-
-# 6. Smoke test  (deploy.sh prints the exact URLs)
-curl http://<nlb>/health/live
-curl http://<nlb>/api/events
-
-# 7. ALWAYS at session end — destroy 20-platform and verify nothing survived
-make down                          # then check the lab credit (~$1.10/session expected)
-```
-
-`10-foundation` is **not** touched per session — apply it once and leave it. Never start
-`make up` after hour 3 of a lab session: credentials expire mid-apply and leave a billable
-half-built stack.
-
-### Autoscaling load test
-
-```bash
-make up NODE_INSTANCE_TYPE=t3.medium      # t3.small's ~11-pod ceiling is too tight for HPA-to-8
-#   (or: terraform -chdir=infra/terraform/20-platform apply -var node_instance_type=t3.medium)
-make load BASE_URL=http://<nlb>           # k6, 0→200 VUs over ~10 min
-kubectl -n eventide get hpa -w            # watch replicas 2 → 8 → 2
-```
-
-## CI
-
-`.github/workflows/ci.yml` runs `lint · check-types · test · build` on every push and PR.
-It does **not** touch AWS — deployment to EKS is a local script, because the AWS Academy
-Learner Lab has no OIDC provider and session credentials expire in 4 hours.
-
-## Conventions
-
-- **Never break an Elysia method chain** — Eden Treaty's end-to-end types depend on it.
-- **Request models are Elysia `t` / TypeBox only.** Zod (v4 — use `z.url()`, not
-  `z.string().url()`) is confined to boot-time env validation.
-- **`/health/live` must never touch the database** — only `/health/ready` does.
-- **Services handle `SIGTERM`** for graceful shutdown.
-
-More in [`CLAUDE.md`](CLAUDE.md).
+รายละเอียด: [docs/SYSTEM-DESIGN.md](docs/SYSTEM-DESIGN.md) (สถาปัตยกรรม, §1.1 สรุปสิ่งที่เปลี่ยนตอน merge v2),
+[docs/PROJECT-KNOWLEDGE-BASE.md](docs/PROJECT-KNOWLEDGE-BASE.md) (เหตุผลของการตัดสินใจ, ข้อจำกัดของ lab),
+[docs/TODO.md](docs/TODO.md) (checklist และ GATE), [CLAUDE.md](CLAUDE.md) (ส่วน Cloud infrastructure)

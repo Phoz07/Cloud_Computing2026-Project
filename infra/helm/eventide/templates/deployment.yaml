@@ -40,25 +40,55 @@ spec:
         - name: {{ $name }}
           image: {{ include "eventide.image" (dict "svc" $svc "root" $root) }}
           imagePullPolicy: {{ $root.Values.imagePullPolicy }}
+          {{- if $svc.args }}
+          args: {{ toJson $svc.args }}
+          {{- end }}
+          {{- if $svc.port }}
           ports:
             - { name: http, containerPort: {{ $svc.port }} }
+          {{- end }}
           env:
+            {{- if $svc.port }}
             - { name: PORT, value: {{ $svc.port | quote }} }
+            {{- end }}
             - { name: NODE_ENV, value: {{ $root.Values.nodeEnv | quote }} }
+            {{- if not $svc.noCommonEnv }}
+            {{- range $k, $v := $root.Values.commonEnv }}
+            - name: {{ $k }}
+              value: {{ tpl $v $root | quote }}
+            {{- end }}
+            {{- end }}
             {{- range $k, $v := $svc.env }}
             - name: {{ $k }}
               value: {{ tpl $v $root | quote }}
             {{- end }}
-          {{- if $svc.secretName }}
-          # DATABASE_URL (+ auth's BETTER_AUTH_SECRET / GOOGLE_*) — scripts/deploy.sh
-          # creates this Secret on EKS, k3d-up.sh from a file on k3d (or ESO when
-          # eso.enabled). The app only ever reads process.env (SYSTEM-DESIGN §5.2).
+          {{- if or (not $svc.noCommonEnv) $svc.secretName }}
+          # Secrets: the common one (DATABASE_URL, S3_*, AWS_*, MAIL_QUEUE_URL) plus the
+          # service's own — scripts/deploy.sh creates them on EKS, k3d-up.sh on k3d (or
+          # ESO when eso.enabled). The app only ever reads process.env (SYSTEM-DESIGN §5.2).
           envFrom:
+            {{- if not $svc.noCommonEnv }}
+            - secretRef:
+                name: {{ $root.Values.commonSecretName }}
+            {{- end }}
+            {{- if $svc.secretName }}
             - secretRef:
                 name: {{ $svc.secretName }}
+            {{- end }}
           {{- end }}
-          # Liveness never touches the DB (CLAUDE.md hard rule); readiness does.
-          # `web` (static nginx) overrides both to `/`.
+          {{- if $svc.port }}
+          {{- if $svc.tcpProbe }}
+          livenessProbe:
+            tcpSocket: { port: http }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket: { port: http }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          {{- else }}
+          # Probes never touch the DB (CLAUDE.md hard rule): every v2 service answers
+          # GET /api/<prefix>/health without I/O; `web` (static nginx) uses `/`.
           livenessProbe:
             httpGet: { path: {{ $svc.livePath | default "/health/live" }}, port: http }
             initialDelaySeconds: 3
@@ -67,6 +97,8 @@ spec:
             httpGet: { path: {{ $svc.readyPath | default "/health/ready" }}, port: http }
             initialDelaySeconds: 3
             periodSeconds: 5
+          {{- end }}
+          {{- end }}
           resources:
             {{- toYaml ($svc.resources | default $root.Values.defaults.resources) | nindent 12 }}
           securityContext:

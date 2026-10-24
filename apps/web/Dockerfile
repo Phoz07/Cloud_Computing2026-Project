@@ -4,26 +4,27 @@
 #
 # Static SPA served by nginx from inside the cluster, behind the same
 # ingress-nginx as the API — one origin, no CORS, no mixed content, and no
-# CloudFront (denied in the lab — docs/lab-probe-2026-09-07.txt). SYSTEM-DESIGN
-# §5.5 wants a single origin anyway.
+# CloudFront (denied in the lab — docs/lab-probe-2026-09-07.txt).
 
 FROM oven/bun:1 AS build
 WORKDIR /app
-COPY package.json bun.lock tsconfig.base.json ./
-COPY packages/shared/package.json packages/shared/
-COPY packages/db/package.json packages/db/
+COPY package.json bun.lock tsconfig.json ./
 COPY apps/auth/package.json apps/auth/
 COPY apps/event/package.json apps/event/
+COPY apps/mail-worker/package.json apps/mail-worker/
+COPY apps/payment/package.json apps/payment/
 COPY apps/registration/package.json apps/registration/
 COPY apps/web/package.json apps/web/
+COPY packages/auth-guard/package.json packages/auth-guard/
+COPY packages/db/package.json packages/db/
+COPY packages/mail/package.json packages/mail/
+COPY packages/storage/package.json packages/storage/
+COPY packages/tickets/package.json packages/tickets/
 RUN bun install --frozen-lockfile
 COPY packages ./packages
-COPY apps/auth ./apps/auth
-COPY apps/event ./apps/event
-COPY apps/registration ./apps/registration
-COPY apps/web ./apps/web
-# vite build only — `tsc --noEmit` is CI's job (turbo check-types), and it needs
-# the whole workspace's type graph which isn't worth reconstructing in the image.
+COPY apps ./apps
+# vite build only — `bun check` is CI's job; the service packages are devDependencies
+# for their exported types (Eden Treaty), erased at build time.
 RUN cd apps/web && bunx --bun vite build
 
 # nginx-unprivileged: runs as uid 101, listens on 8080 — fits a locked-down pod.

@@ -5,126 +5,122 @@
 # CI/CD can't do this (the lab has no OIDC, session creds expire in 4h —
 # SYSTEM-DESIGN.md §9), so deploy is a local script run with fresh credentials.
 # The cluster + ingress-nginx come from `make up` (Terraform); this ships the
-# app whose image changes every commit.
+# app whose image changes every commit, and migrates the database first (the
+# chart's db-migrate pre-upgrade hook).
 #
 #   bash scripts/deploy.sh            # tag = git short sha
 #   bash scripts/deploy.sh v1         # explicit tag
-#   SERVICES="event auth" bash scripts/deploy.sh
+#   IMAGES="event web" bash scripts/deploy.sh
 #
-# Secrets: this script assembles the eventide-{auth,event,registration} k8s
-# Secrets directly from `eventide/rds-master` (the same source the db-bootstrap
-# Job uses), plus `eventide/google-oauth` into eventide-auth if that secret
-# exists (10-foundation/oauth.tf), and deploys with eso.enabled=false. The chart
-# keeps the ESO templates behind that toggle — see SYSTEM-DESIGN §5.2.1 for why
-# they stay disabled in the lab.
+# Secrets — four k8s Secrets assembled here every session (ESO stays off in the
+# lab, SYSTEM-DESIGN §5.2.1; the app only ever reads process.env):
+#   eventide-common       DATABASE_URL, S3_BUCKET, S3_REGION, AWS_REGION, AWS_* session
+#                         creds, MAIL_QUEUE_URL     <- eventide/rds-master, terraform outputs,
+#                                                     `aws configure export-credentials`
+#   eventide-auth         BETTER_AUTH_SECRET (+ GOOGLE_*)        <- rds-master, eventide/google-oauth
+#   eventide-payment      STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET <- eventide/stripe   ("" = payment off)
+#   eventide-mail-worker  GMAIL_USER, GMAIL_APP_PASSWORD, MAIL_FROM <- eventide/gmail  ("" = dry-run)
+# The AWS session creds (S3 + SQS from the pods) expire with the lab session —
+# re-run `make deploy` each session.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 REGION=us-east-1
-SERVICES="${SERVICES:-auth event registration payment web}"
+# Every image by default. A subset (IMAGES="event web") builds, pushes AND pins
+# only those; the other Deployments keep their current tag (scripts/lib.sh).
+IMAGES="${IMAGES:-auth event registration payment mail-worker web db-bootstrap}"
 TAG="${1:-$(git rev-parse --short HEAD)}"
+. "$ROOT/scripts/lib.sh"
+load_aws_env
 
-REG="$(terraform -chdir=infra/terraform/10-foundation output -raw ecr_registry)"
-MASTER_SECRET_ARN="$(terraform -chdir=infra/terraform/20-platform output -raw rds_master_secret_arn)"
-NLB="$(terraform -chdir=infra/terraform/20-platform output -raw nlb_dns_name)"
-# JWT iss/aud + BETTER_AUTH_URL. Prefer the custom domain (Route 53 + ACM, wired
-# in 10-foundation); fall back to the bare NLB over http until DNS lands.
-PUBLIC_URL_TF="$(terraform -chdir=infra/terraform/20-platform output -raw public_url 2>/dev/null || true)"
+REG="$(tfout ecr_registry)"
+UPLOADS_BUCKET="$(tfout uploads_bucket)"
+MAIL_QUEUE_URL="$(tfout mail_queue_url)"
+GOOGLE_SECRET="$(tfout google_oauth_secret || true)"
+STRIPE_SECRET="$(tfout stripe_secret || true)"
+GMAIL_SECRET="$(tfout gmail_secret || true)"
+MASTER_SECRET_ARN="$(tfout rds_master_secret_arn)"
+NLB="$(tfout nlb_dns_name)"
+[ -n "$NLB" ] || { echo "no platform in the Terraform state — run \`make up\` first"; exit 1; }
+# BETTER_AUTH_URL (cookies, OAuth callbacks). Prefer the custom domain (Route 53 +
+# ACM, infra/terraform/dns.tf); fall back to the bare NLB over http until DNS lands.
+PUBLIC_URL_TF="$(tfout public_url || true)"
 PUBLIC_URL="${PUBLIC_URL:-${PUBLIC_URL_TF:-http://$NLB}}"
 
-echo "registry: $REG   tag: $TAG   services: $SERVICES   publicUrl: $PUBLIC_URL"
+echo "registry: $REG   tag: $TAG   images: $IMAGES   publicUrl: $PUBLIC_URL"
 
 aws eks update-kubeconfig --region "$REGION" --name eventide >/dev/null
 aws ecr get-login-password --region "$REGION" \
   | docker login --username AWS --password-stdin "$REG" >/dev/null
 
-for svc in $SERVICES; do
-  echo "== build $svc =="
-  docker build -f "apps/$svc/Dockerfile" --platform linux/amd64 -t "$REG/eventide/$svc:$TAG" .
-  docker push "$REG/eventide/$svc:$TAG"
+for img in $IMAGES; do
+  echo "== build $img =="
+  docker build -f "$(dockerfile_for "$img")" --platform linux/amd64 -t "$REG/eventide/$img:$TAG" .
+  docker push "$REG/eventide/$img:$TAG"
 done
 
-# --- namespace + app Secrets from eventide/rds-master ------------------
+# --- Secrets ---------------------------------------------------------------
 kubectl create namespace eventide --dry-run=client -o yaml | kubectl apply -f -
-
-RDS_JSON="$(aws secretsmanager get-secret-value --secret-id "$MASTER_SECRET_ARN" \
-  --query SecretString --output text)"
-rds() { echo "$RDS_JSON" | jq -r ".$1"; }
-HOST="$(rds host)"; PORT="$(rds port)"
-# 48-char key-encryption key for better-auth's JWKS — from the rds-master secret
-# (20-platform/rds.tf), regenerated on every rebuild alongside auth_db.
-BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET:-$(rds BETTER_AUTH_SECRET)}"
-INTERNAL_SERVICE_TOKEN="$(rds INTERNAL_SERVICE_TOKEN)"
-TICKET_SIGNING_SECRET="$(rds TICKET_SIGNING_SECRET)"
-
 mksecret() { kubectl -n eventide create secret generic "$1" "${@:2}" \
   --dry-run=client -o yaml | kubectl apply -f -; }
-# ?sslmode=require — RDS PG16 forces SSL (rds.force_ssl=1); `require` encrypts
-# without verifying the cert, which is fine inside the VPC.
-SSL="?sslmode=require"
+sm() { aws secretsmanager get-secret-value --region "$REGION" --secret-id "$1" \
+  --query SecretString --output text; }
+jkey() { echo "$1" | jq -r ".$2 // empty"; } # key of a JSON secret, "" when absent
 
-# Google OAuth (optional). eventide/google-oauth is Terraform-managed in
-# 10-foundation from google_client_id / google_client_secret (oauth.tf). Absent →
-# auth runs email/password only (SYSTEM-DESIGN §5.1.1).
-AUTH_ARGS=(
-  --from-literal=DATABASE_URL="postgres://auth_svc:$(rds AUTH_SVC_PASSWORD)@${HOST}:${PORT}/auth_db${SSL}"
-  --from-literal=BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET}"
-)
-GOOGLE_JSON="$(aws secretsmanager get-secret-value --region "$REGION" \
-  --secret-id eventide/google-oauth --query SecretString --output text 2>/dev/null || true)"
-if [ -n "$GOOGLE_JSON" ]; then
-  AUTH_ARGS+=(--from-literal=GOOGLE_CLIENT_ID="$(echo "$GOOGLE_JSON" | jq -r .GOOGLE_CLIENT_ID)")
-  AUTH_ARGS+=(--from-literal=GOOGLE_CLIENT_SECRET="$(echo "$GOOGLE_JSON" | jq -r .GOOGLE_CLIENT_SECRET)")
-  echo "google oauth: enabled"
+RDS_JSON="$(sm "$MASTER_SECRET_ARN")"
+CREDS="$(aws configure export-credentials --format process)"
+mksecret eventide-common \
+  --from-literal=DATABASE_URL="$(jkey "$RDS_JSON" DATABASE_URL)" \
+  --from-literal=S3_BUCKET="$UPLOADS_BUCKET" \
+  --from-literal=S3_REGION="$REGION" \
+  --from-literal=AWS_REGION="$REGION" \
+  --from-literal=AWS_ACCESS_KEY_ID="$(jkey "$CREDS" AccessKeyId)" \
+  --from-literal=AWS_SECRET_ACCESS_KEY="$(jkey "$CREDS" SecretAccessKey)" \
+  --from-literal=AWS_SESSION_TOKEN="$(jkey "$CREDS" SessionToken)" \
+  --from-literal=MAIL_QUEUE_URL="$MAIL_QUEUE_URL"
+
+AUTH_ARGS=(--from-literal=BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET:-$(jkey "$RDS_JSON" BETTER_AUTH_SECRET)}")
+if [ -n "$GOOGLE_SECRET" ]; then
+  G="$(sm "$GOOGLE_SECRET")"
+  AUTH_ARGS+=(--from-literal=GOOGLE_CLIENT_ID="$(jkey "$G" GOOGLE_CLIENT_ID)")
+  AUTH_ARGS+=(--from-literal=GOOGLE_CLIENT_SECRET="$(jkey "$G" GOOGLE_CLIENT_SECRET)")
 fi
 mksecret eventide-auth "${AUTH_ARGS[@]}"
-# event also gets S3: the uploads bucket name + the current session's AWS
-# credentials (the app's one AWS touch-point — presigning cover-image URLs;
-# IRSA and node-role access are both denied, §5.3). These expire with the
-# session — re-run `make deploy` (or just this block) each session.
-UPLOADS_BUCKET="$(terraform -chdir=infra/terraform/10-foundation output -raw uploads_bucket)"
-CREDS="$(aws configure export-credentials --format process 2>/dev/null || true)"
-cred() { echo "$CREDS" | jq -r ".$1 // empty"; }
-mksecret eventide-event \
-  --from-literal=DATABASE_URL="postgres://event_svc:$(rds EVENT_SVC_PASSWORD)@${HOST}:${PORT}/event_db${SSL}" \
-  --from-literal=INTERNAL_SERVICE_TOKEN="$INTERNAL_SERVICE_TOKEN" \
-  --from-literal=S3_BUCKET_NAME="$UPLOADS_BUCKET" \
-  --from-literal=S3_REGION="$REGION" \
-  --from-literal=AWS_ACCESS_KEY_ID="$(cred AccessKeyId)" \
-  --from-literal=AWS_SECRET_ACCESS_KEY="$(cred SecretAccessKey)" \
-  --from-literal=AWS_SESSION_TOKEN="$(cred SessionToken)"
-mksecret eventide-registration \
-  --from-literal=DATABASE_URL="postgres://registration_svc:$(rds REGISTRATION_SVC_PASSWORD)@${HOST}:${PORT}/registration_db${SSL}" \
-  --from-literal=INTERNAL_SERVICE_TOKEN="$INTERNAL_SERVICE_TOKEN" \
-  --from-literal=TICKET_SIGNING_SECRET="$TICKET_SIGNING_SECRET" \
-  --from-literal=TICKET_SIGNING_KEY_ID="eventide-v1"
-mksecret eventide-payment \
-  --from-literal=DATABASE_URL="postgres://payment_svc:$(rds PAYMENT_SVC_PASSWORD)@${HOST}:${PORT}/payment_db${SSL}" \
-  --from-literal=INTERNAL_SERVICE_TOKEN="$INTERNAL_SERVICE_TOKEN"
+echo "google oauth: $([ -n "$GOOGLE_SECRET" ] && echo enabled || echo 'off (no eventide/google-oauth secret)')"
 
-# --- deploy the chart -------------------------------------------------
+S='{}'; [ -n "$STRIPE_SECRET" ] && S="$(sm "$STRIPE_SECRET")"
+mksecret eventide-payment \
+  --from-literal=STRIPE_SECRET_KEY="$(jkey "$S" STRIPE_SECRET_KEY)" \
+  --from-literal=STRIPE_WEBHOOK_SECRET="$(jkey "$S" STRIPE_WEBHOOK_SECRET)"
+echo "stripe: $([ -n "$STRIPE_SECRET" ] && echo enabled || echo 'off (no eventide/stripe secret)')"
+
+M='{}'; [ -n "$GMAIL_SECRET" ] && M="$(sm "$GMAIL_SECRET")"
+mksecret eventide-mail-worker \
+  --from-literal=GMAIL_USER="$(jkey "$M" GMAIL_USER)" \
+  --from-literal=GMAIL_APP_PASSWORD="$(jkey "$M" GMAIL_APP_PASSWORD)" \
+  --from-literal=MAIL_FROM="$(jkey "$M" MAIL_FROM)"
+echo "mail: $([ -n "$GMAIL_SECRET" ] && echo gmail || echo 'dry-run (no eventide/gmail secret)')"
+
+# --- deploy the chart (the db-migrate hook runs before the pods roll) --------
 echo "== helm upgrade --install eventide =="
-helm upgrade --install eventide infra/helm/eventide \
+helm upgrade --install eventide infra/helm/eventide --namespace eventide \
   -f infra/helm/eventide/values.yaml \
   -f infra/helm/eventide/values.aws.yaml \
   --set imageRegistry="$REG" \
   --set publicUrl="$PUBLIC_URL" \
-  --set eso.enabled=false \
-  $(for s in $SERVICES; do echo --set services.$s.image.tag=$TAG; done) \
-  --wait --timeout 420s
+  --set files.bucket="$UPLOADS_BUCKET" \
+  $(helm_tag_sets "$TAG" $IMAGES) $(keep_sets $IMAGES) \
+  --wait --timeout 420s \
+  || { echo "helm failed — look at: helm -n eventide status eventide; kubectl -n eventide get pods; kubectl -n eventide logs job/db-migrate"; exit 1; }
 
-for svc in $SERVICES; do
-  kubectl -n eventide rollout status "deployment/$svc" --timeout=180s
+for d in $APP_SERVICES redis; do
+  kubectl -n eventide rollout status "deployment/$d" --timeout=180s
 done
 
 echo
 echo "deployed. smoke test:"
-echo "  curl http://$NLB/health/live       # {\"status\":\"ok\",\"service\":\"event\"}"
-echo "  curl http://$NLB/api/events"
-echo "  curl http://$NLB/api/auth/jwks"
-case "$PUBLIC_URL" in
-  https://*) echo "  curl $PUBLIC_URL/health/live       # via Route 53 + ACM (once DNS propagates)";;
-esac
-echo "  # migrations: bash scripts/db-bootstrap.sh   ·   seed: bash scripts/seed.sh"
+for p in auth events regis payment; do echo "  curl $PUBLIC_URL/api/$p/health      # โอเค"; done
+echo "  open  $PUBLIC_URL"
+echo "  make admin EMAIL=<registered email>   # first admin, after registering in the web"

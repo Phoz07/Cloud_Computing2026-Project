@@ -10,42 +10,54 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AdminRouteImport } from './routes/_admin'
-import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
-import { Route as OrganizerRouteImport } from './routes/_organizer'
+import { Route as AuthedRouteImport } from './routes/_authed'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as AuthenticatedOrdersRouteImport } from './routes/_authenticated.orders'
-import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated.profile'
-import { Route as AuthenticatedTicketsRouteImport } from './routes/_authenticated.tickets'
-import { Route as EventsIndexRouteImport } from './routes/events.index'
-import { Route as EventsEventIdRouteImport } from './routes/events.$eventId'
-import { Route as AdminAdminAuditRouteImport } from './routes/_admin.admin.audit'
-import { Route as AdminAdminCheckInRouteImport } from './routes/_admin.admin.check-in'
-import { Route as AdminAdminEventsRouteImport } from './routes/_admin.admin.events'
-import { Route as AdminAdminPaymentsRouteImport } from './routes/_admin.admin.payments'
-import { Route as AdminAdminUsersRouteImport } from './routes/_admin.admin.users'
-import { Route as OrganizerOrganizerCheckInRouteImport } from './routes/_organizer.organizer.check-in'
-import { Route as OrganizerOrganizerEventsIndexRouteImport } from './routes/_organizer.organizer.events.index'
-import { Route as OrganizerOrganizerEventsNewRouteImport } from './routes/_organizer.organizer.events.new'
-import { Route as OrganizerOrganizerEventsEventIdEditRouteImport } from './routes/_organizer.organizer.events.$eventId.edit'
-import { Route as OrganizerOrganizerEventsEventIdImagesRouteImport } from './routes/_organizer.organizer.events.$eventId.images'
-import { Route as OrganizerOrganizerEventsEventIdSalesRouteImport } from './routes/_organizer.organizer.events.$eventId.sales'
+import { Route as RegisterRouteImport } from './routes/register'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as StatusRouteImport } from './routes/status'
+import { Route as AuthedDashboardRouteImport } from './routes/_authed/dashboard'
+import { Route as AuthedProfileRouteImport } from './routes/_authed/profile'
+import { Route as EventsSlugRouteImport } from './routes/events/$slug'
+import { Route as EventsBrowseRouteImport } from './routes/events/_browse'
+import { Route as AuthedDashboardIndexRouteImport } from './routes/_authed/dashboard/index'
+import { Route as AuthedDashboardApplicationsRouteImport } from './routes/_authed/dashboard/applications'
+import { Route as AuthedDashboardCategoriesRouteImport } from './routes/_authed/dashboard/categories'
+import { Route as AuthedDashboardUsersRouteImport } from './routes/_authed/dashboard/users'
+import { Route as AuthedProfileIndexRouteImport } from './routes/_authed/profile/index'
+import { Route as AuthedProfileDeleteRouteImport } from './routes/_authed/profile/delete'
+import { Route as AuthedProfileOrganizerRouteImport } from './routes/_authed/profile/organizer'
+import { Route as AuthedProfileSessionsRouteImport } from './routes/_authed/profile/sessions'
+import { Route as AuthedProfileSignInRouteImport } from './routes/_authed/profile/sign-in'
+import { Route as AuthedTicketsIndexRouteImport } from './routes/_authed/tickets/index'
+import { Route as AuthedTicketsTicketIdRouteImport } from './routes/_authed/tickets/$ticketId'
+import { Route as EventsBrowseIndexRouteImport } from './routes/events/_browse/index'
+import { Route as AuthedDashboardEventsIndexRouteImport } from './routes/_authed/dashboard/events/index'
+import { Route as AuthedDashboardEventsEventIdRouteRouteImport } from './routes/_authed/dashboard/events/$eventId/route'
+import { Route as AuthedDashboardEventsNewRouteImport } from './routes/_authed/dashboard/events/new'
+import { Route as AuthedTicketsOrdersEnrollmentIdRouteImport } from './routes/_authed/tickets/orders/$enrollmentId'
+import { Route as EventsBrowseCategoriesCategoryRouteImport } from './routes/events/_browse/categories.$category'
+import { Route as AuthedDashboardEventsEventIdIndexRouteImport } from './routes/_authed/dashboard/events/$eventId/index'
+import { Route as AuthedDashboardEventsEventIdInvitationsRouteImport } from './routes/_authed/dashboard/events/$eventId/invitations'
+import { Route as AuthedDashboardEventsEventIdParticipantsRouteImport } from './routes/_authed/dashboard/events/$eventId/participants'
+import { Route as AuthedDashboardEventsEventIdRefundsRouteImport } from './routes/_authed/dashboard/events/$eventId/refunds'
+import { Route as AuthedEventsSlugEnrollTicketTypeIdRouteImport } from './routes/_authed/events/$slug/enroll/$ticketTypeId'
+import { Route as AuthedDashboardEventsEventIdTicketsIndexRouteImport } from './routes/_authed/dashboard/events/$eventId/tickets/index'
+import { Route as AuthedDashboardEventsEventIdTicketsTicketTypeIdRouteImport } from './routes/_authed/dashboard/events/$eventId/tickets/$ticketTypeId'
+import { Route as AuthedDashboardEventsEventIdTicketsNewRouteImport } from './routes/_authed/dashboard/events/$eventId/tickets/new'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AdminRoute = AdminRouteImport.update({
-  id: '/_admin',
+const AuthedRoute = AuthedRouteImport.update({
+  id: '/_authed',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedRoute = AuthenticatedRouteImport.update({
-  id: '/_authenticated',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OrganizerRoute = OrganizerRouteImport.update({
-  id: '/_organizer',
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -53,231 +65,412 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedOrdersRoute = AuthenticatedOrdersRouteImport.update({
-  id: '/orders',
-  path: '/orders',
-  getParentRoute: () => AuthenticatedRoute,
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StatusRoute = StatusRouteImport.update({
+  id: '/status',
+  path: '/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthedDashboardRoute = AuthedDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedProfileRoute = AuthedProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
-  getParentRoute: () => AuthenticatedRoute,
+  getParentRoute: () => AuthedRoute,
 } as any)
-const AuthenticatedTicketsRoute = AuthenticatedTicketsRouteImport.update({
-  id: '/tickets',
-  path: '/tickets',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
-const EventsIndexRoute = EventsIndexRouteImport.update({
-  id: '/events/',
-  path: '/events/',
+const EventsSlugRoute = EventsSlugRouteImport.update({
+  id: '/events/$slug',
+  path: '/events/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
-const EventsEventIdRoute = EventsEventIdRouteImport.update({
-  id: '/events/$eventId',
-  path: '/events/$eventId',
+const EventsBrowseRoute = EventsBrowseRouteImport.update({
+  id: '/events/_browse',
+  path: '/events',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AdminAdminAuditRoute = AdminAdminAuditRouteImport.update({
-  id: '/admin/audit',
-  path: '/admin/audit',
-  getParentRoute: () => AdminRoute,
+const AuthedDashboardIndexRoute = AuthedDashboardIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthedDashboardRoute,
 } as any)
-const AdminAdminCheckInRoute = AdminAdminCheckInRouteImport.update({
-  id: '/admin/check-in',
-  path: '/admin/check-in',
-  getParentRoute: () => AdminRoute,
+const AuthedDashboardApplicationsRoute =
+  AuthedDashboardApplicationsRouteImport.update({
+    id: '/applications',
+    path: '/applications',
+    getParentRoute: () => AuthedDashboardRoute,
+  } as any)
+const AuthedDashboardCategoriesRoute =
+  AuthedDashboardCategoriesRouteImport.update({
+    id: '/categories',
+    path: '/categories',
+    getParentRoute: () => AuthedDashboardRoute,
+  } as any)
+const AuthedDashboardUsersRoute = AuthedDashboardUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AuthedDashboardRoute,
 } as any)
-const AdminAdminEventsRoute = AdminAdminEventsRouteImport.update({
-  id: '/admin/events',
-  path: '/admin/events',
-  getParentRoute: () => AdminRoute,
+const AuthedProfileIndexRoute = AuthedProfileIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthedProfileRoute,
 } as any)
-const AdminAdminPaymentsRoute = AdminAdminPaymentsRouteImport.update({
-  id: '/admin/payments',
-  path: '/admin/payments',
-  getParentRoute: () => AdminRoute,
+const AuthedProfileDeleteRoute = AuthedProfileDeleteRouteImport.update({
+  id: '/delete',
+  path: '/delete',
+  getParentRoute: () => AuthedProfileRoute,
 } as any)
-const AdminAdminUsersRoute = AdminAdminUsersRouteImport.update({
-  id: '/admin/users',
-  path: '/admin/users',
-  getParentRoute: () => AdminRoute,
+const AuthedProfileOrganizerRoute = AuthedProfileOrganizerRouteImport.update({
+  id: '/organizer',
+  path: '/organizer',
+  getParentRoute: () => AuthedProfileRoute,
 } as any)
-const OrganizerOrganizerCheckInRoute =
-  OrganizerOrganizerCheckInRouteImport.update({
-    id: '/organizer/check-in',
-    path: '/organizer/check-in',
-    getParentRoute: () => OrganizerRoute,
+const AuthedProfileSessionsRoute = AuthedProfileSessionsRouteImport.update({
+  id: '/sessions',
+  path: '/sessions',
+  getParentRoute: () => AuthedProfileRoute,
+} as any)
+const AuthedProfileSignInRoute = AuthedProfileSignInRouteImport.update({
+  id: '/sign-in',
+  path: '/sign-in',
+  getParentRoute: () => AuthedProfileRoute,
+} as any)
+const AuthedTicketsIndexRoute = AuthedTicketsIndexRouteImport.update({
+  id: '/tickets/',
+  path: '/tickets/',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedTicketsTicketIdRoute = AuthedTicketsTicketIdRouteImport.update({
+  id: '/tickets/$ticketId',
+  path: '/tickets/$ticketId',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const EventsBrowseIndexRoute = EventsBrowseIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => EventsBrowseRoute,
+} as any)
+const AuthedDashboardEventsIndexRoute =
+  AuthedDashboardEventsIndexRouteImport.update({
+    id: '/events/',
+    path: '/events/',
+    getParentRoute: () => AuthedDashboardRoute,
   } as any)
-const OrganizerOrganizerEventsIndexRoute =
-  OrganizerOrganizerEventsIndexRouteImport.update({
-    id: '/organizer/events/',
-    path: '/organizer/events/',
-    getParentRoute: () => OrganizerRoute,
+const AuthedDashboardEventsEventIdRouteRoute =
+  AuthedDashboardEventsEventIdRouteRouteImport.update({
+    id: '/events/$eventId',
+    path: '/events/$eventId',
+    getParentRoute: () => AuthedDashboardRoute,
   } as any)
-const OrganizerOrganizerEventsNewRoute =
-  OrganizerOrganizerEventsNewRouteImport.update({
-    id: '/organizer/events/new',
-    path: '/organizer/events/new',
-    getParentRoute: () => OrganizerRoute,
+const AuthedDashboardEventsNewRoute =
+  AuthedDashboardEventsNewRouteImport.update({
+    id: '/events/new',
+    path: '/events/new',
+    getParentRoute: () => AuthedDashboardRoute,
   } as any)
-const OrganizerOrganizerEventsEventIdEditRoute =
-  OrganizerOrganizerEventsEventIdEditRouteImport.update({
-    id: '/organizer/events/$eventId/edit',
-    path: '/organizer/events/$eventId/edit',
-    getParentRoute: () => OrganizerRoute,
+const AuthedTicketsOrdersEnrollmentIdRoute =
+  AuthedTicketsOrdersEnrollmentIdRouteImport.update({
+    id: '/tickets/orders/$enrollmentId',
+    path: '/tickets/orders/$enrollmentId',
+    getParentRoute: () => AuthedRoute,
   } as any)
-const OrganizerOrganizerEventsEventIdImagesRoute =
-  OrganizerOrganizerEventsEventIdImagesRouteImport.update({
-    id: '/organizer/events/$eventId/images',
-    path: '/organizer/events/$eventId/images',
-    getParentRoute: () => OrganizerRoute,
+const EventsBrowseCategoriesCategoryRoute =
+  EventsBrowseCategoriesCategoryRouteImport.update({
+    id: '/categories/$category',
+    path: '/categories/$category',
+    getParentRoute: () => EventsBrowseRoute,
   } as any)
-const OrganizerOrganizerEventsEventIdSalesRoute =
-  OrganizerOrganizerEventsEventIdSalesRouteImport.update({
-    id: '/organizer/events/$eventId/sales',
-    path: '/organizer/events/$eventId/sales',
-    getParentRoute: () => OrganizerRoute,
+const AuthedDashboardEventsEventIdIndexRoute =
+  AuthedDashboardEventsEventIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthedDashboardEventsEventIdRouteRoute,
+  } as any)
+const AuthedDashboardEventsEventIdInvitationsRoute =
+  AuthedDashboardEventsEventIdInvitationsRouteImport.update({
+    id: '/invitations',
+    path: '/invitations',
+    getParentRoute: () => AuthedDashboardEventsEventIdRouteRoute,
+  } as any)
+const AuthedDashboardEventsEventIdParticipantsRoute =
+  AuthedDashboardEventsEventIdParticipantsRouteImport.update({
+    id: '/participants',
+    path: '/participants',
+    getParentRoute: () => AuthedDashboardEventsEventIdRouteRoute,
+  } as any)
+const AuthedDashboardEventsEventIdRefundsRoute =
+  AuthedDashboardEventsEventIdRefundsRouteImport.update({
+    id: '/refunds',
+    path: '/refunds',
+    getParentRoute: () => AuthedDashboardEventsEventIdRouteRoute,
+  } as any)
+const AuthedEventsSlugEnrollTicketTypeIdRoute =
+  AuthedEventsSlugEnrollTicketTypeIdRouteImport.update({
+    id: '/events/$slug/enroll/$ticketTypeId',
+    path: '/events/$slug/enroll/$ticketTypeId',
+    getParentRoute: () => AuthedRoute,
+  } as any)
+const AuthedDashboardEventsEventIdTicketsIndexRoute =
+  AuthedDashboardEventsEventIdTicketsIndexRouteImport.update({
+    id: '/tickets/',
+    path: '/tickets/',
+    getParentRoute: () => AuthedDashboardEventsEventIdRouteRoute,
+  } as any)
+const AuthedDashboardEventsEventIdTicketsTicketTypeIdRoute =
+  AuthedDashboardEventsEventIdTicketsTicketTypeIdRouteImport.update({
+    id: '/tickets/$ticketTypeId',
+    path: '/tickets/$ticketTypeId',
+    getParentRoute: () => AuthedDashboardEventsEventIdRouteRoute,
+  } as any)
+const AuthedDashboardEventsEventIdTicketsNewRoute =
+  AuthedDashboardEventsEventIdTicketsNewRouteImport.update({
+    id: '/tickets/new',
+    path: '/tickets/new',
+    getParentRoute: () => AuthedDashboardEventsEventIdRouteRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
-  '/orders': typeof AuthenticatedOrdersRoute
-  '/profile': typeof AuthenticatedProfileRoute
-  '/tickets': typeof AuthenticatedTicketsRoute
-  '/events/$eventId': typeof EventsEventIdRoute
-  '/events/': typeof EventsIndexRoute
-  '/admin/audit': typeof AdminAdminAuditRoute
-  '/admin/check-in': typeof AdminAdminCheckInRoute
-  '/admin/events': typeof AdminAdminEventsRoute
-  '/admin/payments': typeof AdminAdminPaymentsRoute
-  '/admin/users': typeof AdminAdminUsersRoute
-  '/organizer/check-in': typeof OrganizerOrganizerCheckInRoute
-  '/organizer/events/new': typeof OrganizerOrganizerEventsNewRoute
-  '/organizer/events/': typeof OrganizerOrganizerEventsIndexRoute
-  '/organizer/events/$eventId/edit': typeof OrganizerOrganizerEventsEventIdEditRoute
-  '/organizer/events/$eventId/images': typeof OrganizerOrganizerEventsEventIdImagesRoute
-  '/organizer/events/$eventId/sales': typeof OrganizerOrganizerEventsEventIdSalesRoute
+  '/register': typeof RegisterRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/status': typeof StatusRoute
+  '/dashboard': typeof AuthedDashboardRouteWithChildren
+  '/profile': typeof AuthedProfileRouteWithChildren
+  '/events/$slug': typeof EventsSlugRoute
+  '/events': typeof EventsBrowseRouteWithChildren
+  '/dashboard/applications': typeof AuthedDashboardApplicationsRoute
+  '/dashboard/categories': typeof AuthedDashboardCategoriesRoute
+  '/dashboard/users': typeof AuthedDashboardUsersRoute
+  '/profile/delete': typeof AuthedProfileDeleteRoute
+  '/profile/organizer': typeof AuthedProfileOrganizerRoute
+  '/profile/sessions': typeof AuthedProfileSessionsRoute
+  '/profile/sign-in': typeof AuthedProfileSignInRoute
+  '/tickets/$ticketId': typeof AuthedTicketsTicketIdRoute
+  '/dashboard/': typeof AuthedDashboardIndexRoute
+  '/profile/': typeof AuthedProfileIndexRoute
+  '/tickets/': typeof AuthedTicketsIndexRoute
+  '/events/': typeof EventsBrowseIndexRoute
+  '/dashboard/events/$eventId': typeof AuthedDashboardEventsEventIdRouteRouteWithChildren
+  '/dashboard/events/new': typeof AuthedDashboardEventsNewRoute
+  '/tickets/orders/$enrollmentId': typeof AuthedTicketsOrdersEnrollmentIdRoute
+  '/events/categories/$category': typeof EventsBrowseCategoriesCategoryRoute
+  '/dashboard/events/': typeof AuthedDashboardEventsIndexRoute
+  '/dashboard/events/$eventId/invitations': typeof AuthedDashboardEventsEventIdInvitationsRoute
+  '/dashboard/events/$eventId/participants': typeof AuthedDashboardEventsEventIdParticipantsRoute
+  '/dashboard/events/$eventId/refunds': typeof AuthedDashboardEventsEventIdRefundsRoute
+  '/events/$slug/enroll/$ticketTypeId': typeof AuthedEventsSlugEnrollTicketTypeIdRoute
+  '/dashboard/events/$eventId/': typeof AuthedDashboardEventsEventIdIndexRoute
+  '/dashboard/events/$eventId/tickets/$ticketTypeId': typeof AuthedDashboardEventsEventIdTicketsTicketTypeIdRoute
+  '/dashboard/events/$eventId/tickets/new': typeof AuthedDashboardEventsEventIdTicketsNewRoute
+  '/dashboard/events/$eventId/tickets/': typeof AuthedDashboardEventsEventIdTicketsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
-  '/orders': typeof AuthenticatedOrdersRoute
-  '/profile': typeof AuthenticatedProfileRoute
-  '/tickets': typeof AuthenticatedTicketsRoute
-  '/events/$eventId': typeof EventsEventIdRoute
-  '/events': typeof EventsIndexRoute
-  '/admin/audit': typeof AdminAdminAuditRoute
-  '/admin/check-in': typeof AdminAdminCheckInRoute
-  '/admin/events': typeof AdminAdminEventsRoute
-  '/admin/payments': typeof AdminAdminPaymentsRoute
-  '/admin/users': typeof AdminAdminUsersRoute
-  '/organizer/check-in': typeof OrganizerOrganizerCheckInRoute
-  '/organizer/events/new': typeof OrganizerOrganizerEventsNewRoute
-  '/organizer/events': typeof OrganizerOrganizerEventsIndexRoute
-  '/organizer/events/$eventId/edit': typeof OrganizerOrganizerEventsEventIdEditRoute
-  '/organizer/events/$eventId/images': typeof OrganizerOrganizerEventsEventIdImagesRoute
-  '/organizer/events/$eventId/sales': typeof OrganizerOrganizerEventsEventIdSalesRoute
+  '/register': typeof RegisterRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/status': typeof StatusRoute
+  '/events/$slug': typeof EventsSlugRoute
+  '/dashboard/applications': typeof AuthedDashboardApplicationsRoute
+  '/dashboard/categories': typeof AuthedDashboardCategoriesRoute
+  '/dashboard/users': typeof AuthedDashboardUsersRoute
+  '/profile/delete': typeof AuthedProfileDeleteRoute
+  '/profile/organizer': typeof AuthedProfileOrganizerRoute
+  '/profile/sessions': typeof AuthedProfileSessionsRoute
+  '/profile/sign-in': typeof AuthedProfileSignInRoute
+  '/tickets/$ticketId': typeof AuthedTicketsTicketIdRoute
+  '/dashboard': typeof AuthedDashboardIndexRoute
+  '/profile': typeof AuthedProfileIndexRoute
+  '/tickets': typeof AuthedTicketsIndexRoute
+  '/events': typeof EventsBrowseIndexRoute
+  '/dashboard/events/new': typeof AuthedDashboardEventsNewRoute
+  '/tickets/orders/$enrollmentId': typeof AuthedTicketsOrdersEnrollmentIdRoute
+  '/events/categories/$category': typeof EventsBrowseCategoriesCategoryRoute
+  '/dashboard/events': typeof AuthedDashboardEventsIndexRoute
+  '/dashboard/events/$eventId/invitations': typeof AuthedDashboardEventsEventIdInvitationsRoute
+  '/dashboard/events/$eventId/participants': typeof AuthedDashboardEventsEventIdParticipantsRoute
+  '/dashboard/events/$eventId/refunds': typeof AuthedDashboardEventsEventIdRefundsRoute
+  '/events/$slug/enroll/$ticketTypeId': typeof AuthedEventsSlugEnrollTicketTypeIdRoute
+  '/dashboard/events/$eventId': typeof AuthedDashboardEventsEventIdIndexRoute
+  '/dashboard/events/$eventId/tickets/$ticketTypeId': typeof AuthedDashboardEventsEventIdTicketsTicketTypeIdRoute
+  '/dashboard/events/$eventId/tickets/new': typeof AuthedDashboardEventsEventIdTicketsNewRoute
+  '/dashboard/events/$eventId/tickets': typeof AuthedDashboardEventsEventIdTicketsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/_admin': typeof AdminRouteWithChildren
-  '/_authenticated': typeof AuthenticatedRouteWithChildren
-  '/_organizer': typeof OrganizerRouteWithChildren
+  '/_authed': typeof AuthedRouteWithChildren
+  '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
-  '/_authenticated/orders': typeof AuthenticatedOrdersRoute
-  '/_authenticated/profile': typeof AuthenticatedProfileRoute
-  '/_authenticated/tickets': typeof AuthenticatedTicketsRoute
-  '/events/$eventId': typeof EventsEventIdRoute
-  '/events/': typeof EventsIndexRoute
-  '/_admin/admin/audit': typeof AdminAdminAuditRoute
-  '/_admin/admin/check-in': typeof AdminAdminCheckInRoute
-  '/_admin/admin/events': typeof AdminAdminEventsRoute
-  '/_admin/admin/payments': typeof AdminAdminPaymentsRoute
-  '/_admin/admin/users': typeof AdminAdminUsersRoute
-  '/_organizer/organizer/check-in': typeof OrganizerOrganizerCheckInRoute
-  '/_organizer/organizer/events/new': typeof OrganizerOrganizerEventsNewRoute
-  '/_organizer/organizer/events/': typeof OrganizerOrganizerEventsIndexRoute
-  '/_organizer/organizer/events/$eventId/edit': typeof OrganizerOrganizerEventsEventIdEditRoute
-  '/_organizer/organizer/events/$eventId/images': typeof OrganizerOrganizerEventsEventIdImagesRoute
-  '/_organizer/organizer/events/$eventId/sales': typeof OrganizerOrganizerEventsEventIdSalesRoute
+  '/register': typeof RegisterRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/status': typeof StatusRoute
+  '/_authed/dashboard': typeof AuthedDashboardRouteWithChildren
+  '/_authed/profile': typeof AuthedProfileRouteWithChildren
+  '/events/$slug': typeof EventsSlugRoute
+  '/events/_browse': typeof EventsBrowseRouteWithChildren
+  '/_authed/dashboard/applications': typeof AuthedDashboardApplicationsRoute
+  '/_authed/dashboard/categories': typeof AuthedDashboardCategoriesRoute
+  '/_authed/dashboard/users': typeof AuthedDashboardUsersRoute
+  '/_authed/profile/delete': typeof AuthedProfileDeleteRoute
+  '/_authed/profile/organizer': typeof AuthedProfileOrganizerRoute
+  '/_authed/profile/sessions': typeof AuthedProfileSessionsRoute
+  '/_authed/profile/sign-in': typeof AuthedProfileSignInRoute
+  '/_authed/tickets/$ticketId': typeof AuthedTicketsTicketIdRoute
+  '/_authed/dashboard/': typeof AuthedDashboardIndexRoute
+  '/_authed/profile/': typeof AuthedProfileIndexRoute
+  '/_authed/tickets/': typeof AuthedTicketsIndexRoute
+  '/events/_browse/': typeof EventsBrowseIndexRoute
+  '/_authed/dashboard/events/$eventId': typeof AuthedDashboardEventsEventIdRouteRouteWithChildren
+  '/_authed/dashboard/events/new': typeof AuthedDashboardEventsNewRoute
+  '/_authed/tickets/orders/$enrollmentId': typeof AuthedTicketsOrdersEnrollmentIdRoute
+  '/events/_browse/categories/$category': typeof EventsBrowseCategoriesCategoryRoute
+  '/_authed/dashboard/events/': typeof AuthedDashboardEventsIndexRoute
+  '/_authed/dashboard/events/$eventId/invitations': typeof AuthedDashboardEventsEventIdInvitationsRoute
+  '/_authed/dashboard/events/$eventId/participants': typeof AuthedDashboardEventsEventIdParticipantsRoute
+  '/_authed/dashboard/events/$eventId/refunds': typeof AuthedDashboardEventsEventIdRefundsRoute
+  '/_authed/events/$slug/enroll/$ticketTypeId': typeof AuthedEventsSlugEnrollTicketTypeIdRoute
+  '/_authed/dashboard/events/$eventId/': typeof AuthedDashboardEventsEventIdIndexRoute
+  '/_authed/dashboard/events/$eventId/tickets/$ticketTypeId': typeof AuthedDashboardEventsEventIdTicketsTicketTypeIdRoute
+  '/_authed/dashboard/events/$eventId/tickets/new': typeof AuthedDashboardEventsEventIdTicketsNewRoute
+  '/_authed/dashboard/events/$eventId/tickets/': typeof AuthedDashboardEventsEventIdTicketsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/forgot-password'
     | '/login'
-    | '/orders'
+    | '/register'
+    | '/reset-password'
+    | '/status'
+    | '/dashboard'
     | '/profile'
-    | '/tickets'
-    | '/events/$eventId'
+    | '/events/$slug'
+    | '/events'
+    | '/dashboard/applications'
+    | '/dashboard/categories'
+    | '/dashboard/users'
+    | '/profile/delete'
+    | '/profile/organizer'
+    | '/profile/sessions'
+    | '/profile/sign-in'
+    | '/tickets/$ticketId'
+    | '/dashboard/'
+    | '/profile/'
+    | '/tickets/'
     | '/events/'
-    | '/admin/audit'
-    | '/admin/check-in'
-    | '/admin/events'
-    | '/admin/payments'
-    | '/admin/users'
-    | '/organizer/check-in'
-    | '/organizer/events/new'
-    | '/organizer/events/'
-    | '/organizer/events/$eventId/edit'
-    | '/organizer/events/$eventId/images'
-    | '/organizer/events/$eventId/sales'
+    | '/dashboard/events/$eventId'
+    | '/dashboard/events/new'
+    | '/tickets/orders/$enrollmentId'
+    | '/events/categories/$category'
+    | '/dashboard/events/'
+    | '/dashboard/events/$eventId/invitations'
+    | '/dashboard/events/$eventId/participants'
+    | '/dashboard/events/$eventId/refunds'
+    | '/events/$slug/enroll/$ticketTypeId'
+    | '/dashboard/events/$eventId/'
+    | '/dashboard/events/$eventId/tickets/$ticketTypeId'
+    | '/dashboard/events/$eventId/tickets/new'
+    | '/dashboard/events/$eventId/tickets/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/forgot-password'
     | '/login'
-    | '/orders'
+    | '/register'
+    | '/reset-password'
+    | '/status'
+    | '/events/$slug'
+    | '/dashboard/applications'
+    | '/dashboard/categories'
+    | '/dashboard/users'
+    | '/profile/delete'
+    | '/profile/organizer'
+    | '/profile/sessions'
+    | '/profile/sign-in'
+    | '/tickets/$ticketId'
+    | '/dashboard'
     | '/profile'
     | '/tickets'
-    | '/events/$eventId'
     | '/events'
-    | '/admin/audit'
-    | '/admin/check-in'
-    | '/admin/events'
-    | '/admin/payments'
-    | '/admin/users'
-    | '/organizer/check-in'
-    | '/organizer/events/new'
-    | '/organizer/events'
-    | '/organizer/events/$eventId/edit'
-    | '/organizer/events/$eventId/images'
-    | '/organizer/events/$eventId/sales'
+    | '/dashboard/events/new'
+    | '/tickets/orders/$enrollmentId'
+    | '/events/categories/$category'
+    | '/dashboard/events'
+    | '/dashboard/events/$eventId/invitations'
+    | '/dashboard/events/$eventId/participants'
+    | '/dashboard/events/$eventId/refunds'
+    | '/events/$slug/enroll/$ticketTypeId'
+    | '/dashboard/events/$eventId'
+    | '/dashboard/events/$eventId/tickets/$ticketTypeId'
+    | '/dashboard/events/$eventId/tickets/new'
+    | '/dashboard/events/$eventId/tickets'
   id:
     | '__root__'
     | '/'
-    | '/_admin'
-    | '/_authenticated'
-    | '/_organizer'
+    | '/_authed'
+    | '/forgot-password'
     | '/login'
-    | '/_authenticated/orders'
-    | '/_authenticated/profile'
-    | '/_authenticated/tickets'
-    | '/events/$eventId'
-    | '/events/'
-    | '/_admin/admin/audit'
-    | '/_admin/admin/check-in'
-    | '/_admin/admin/events'
-    | '/_admin/admin/payments'
-    | '/_admin/admin/users'
-    | '/_organizer/organizer/check-in'
-    | '/_organizer/organizer/events/new'
-    | '/_organizer/organizer/events/'
-    | '/_organizer/organizer/events/$eventId/edit'
-    | '/_organizer/organizer/events/$eventId/images'
-    | '/_organizer/organizer/events/$eventId/sales'
+    | '/register'
+    | '/reset-password'
+    | '/status'
+    | '/_authed/dashboard'
+    | '/_authed/profile'
+    | '/events/$slug'
+    | '/events/_browse'
+    | '/_authed/dashboard/applications'
+    | '/_authed/dashboard/categories'
+    | '/_authed/dashboard/users'
+    | '/_authed/profile/delete'
+    | '/_authed/profile/organizer'
+    | '/_authed/profile/sessions'
+    | '/_authed/profile/sign-in'
+    | '/_authed/tickets/$ticketId'
+    | '/_authed/dashboard/'
+    | '/_authed/profile/'
+    | '/_authed/tickets/'
+    | '/events/_browse/'
+    | '/_authed/dashboard/events/$eventId'
+    | '/_authed/dashboard/events/new'
+    | '/_authed/tickets/orders/$enrollmentId'
+    | '/events/_browse/categories/$category'
+    | '/_authed/dashboard/events/'
+    | '/_authed/dashboard/events/$eventId/invitations'
+    | '/_authed/dashboard/events/$eventId/participants'
+    | '/_authed/dashboard/events/$eventId/refunds'
+    | '/_authed/events/$slug/enroll/$ticketTypeId'
+    | '/_authed/dashboard/events/$eventId/'
+    | '/_authed/dashboard/events/$eventId/tickets/$ticketTypeId'
+    | '/_authed/dashboard/events/$eventId/tickets/new'
+    | '/_authed/dashboard/events/$eventId/tickets/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AdminRoute: typeof AdminRouteWithChildren
-  AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
-  OrganizerRoute: typeof OrganizerRouteWithChildren
+  AuthedRoute: typeof AuthedRouteWithChildren
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
-  EventsEventIdRoute: typeof EventsEventIdRoute
-  EventsIndexRoute: typeof EventsIndexRoute
+  RegisterRoute: typeof RegisterRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
+  StatusRoute: typeof StatusRoute
+  EventsSlugRoute: typeof EventsSlugRoute
+  EventsBrowseRoute: typeof EventsBrowseRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -289,25 +482,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_admin': {
-      id: '/_admin'
+    '/_authed': {
+      id: '/_authed'
       path: ''
       fullPath: '/'
-      preLoaderRoute: typeof AdminRouteImport
+      preLoaderRoute: typeof AuthedRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated': {
-      id: '/_authenticated'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof AuthenticatedRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_organizer': {
-      id: '/_organizer'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof OrganizerRouteImport
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -317,188 +503,357 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/orders': {
-      id: '/_authenticated/orders'
-      path: '/orders'
-      fullPath: '/orders'
-      preLoaderRoute: typeof AuthenticatedOrdersRouteImport
-      parentRoute: typeof AuthenticatedRoute
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/profile': {
-      id: '/_authenticated/profile'
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/status': {
+      id: '/status'
+      path: '/status'
+      fullPath: '/status'
+      preLoaderRoute: typeof StatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authed/dashboard': {
+      id: '/_authed/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthedDashboardRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/profile': {
+      id: '/_authed/profile'
       path: '/profile'
       fullPath: '/profile'
-      preLoaderRoute: typeof AuthenticatedProfileRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      preLoaderRoute: typeof AuthedProfileRouteImport
+      parentRoute: typeof AuthedRoute
     }
-    '/_authenticated/tickets': {
-      id: '/_authenticated/tickets'
-      path: '/tickets'
-      fullPath: '/tickets'
-      preLoaderRoute: typeof AuthenticatedTicketsRouteImport
-      parentRoute: typeof AuthenticatedRoute
+    '/events/$slug': {
+      id: '/events/$slug'
+      path: '/events/$slug'
+      fullPath: '/events/$slug'
+      preLoaderRoute: typeof EventsSlugRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/events/': {
-      id: '/events/'
+    '/events/_browse': {
+      id: '/events/_browse'
       path: '/events'
+      fullPath: '/events'
+      preLoaderRoute: typeof EventsBrowseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authed/dashboard/': {
+      id: '/_authed/dashboard/'
+      path: '/'
+      fullPath: '/dashboard/'
+      preLoaderRoute: typeof AuthedDashboardIndexRouteImport
+      parentRoute: typeof AuthedDashboardRoute
+    }
+    '/_authed/dashboard/applications': {
+      id: '/_authed/dashboard/applications'
+      path: '/applications'
+      fullPath: '/dashboard/applications'
+      preLoaderRoute: typeof AuthedDashboardApplicationsRouteImport
+      parentRoute: typeof AuthedDashboardRoute
+    }
+    '/_authed/dashboard/categories': {
+      id: '/_authed/dashboard/categories'
+      path: '/categories'
+      fullPath: '/dashboard/categories'
+      preLoaderRoute: typeof AuthedDashboardCategoriesRouteImport
+      parentRoute: typeof AuthedDashboardRoute
+    }
+    '/_authed/dashboard/users': {
+      id: '/_authed/dashboard/users'
+      path: '/users'
+      fullPath: '/dashboard/users'
+      preLoaderRoute: typeof AuthedDashboardUsersRouteImport
+      parentRoute: typeof AuthedDashboardRoute
+    }
+    '/_authed/profile/': {
+      id: '/_authed/profile/'
+      path: '/'
+      fullPath: '/profile/'
+      preLoaderRoute: typeof AuthedProfileIndexRouteImport
+      parentRoute: typeof AuthedProfileRoute
+    }
+    '/_authed/profile/delete': {
+      id: '/_authed/profile/delete'
+      path: '/delete'
+      fullPath: '/profile/delete'
+      preLoaderRoute: typeof AuthedProfileDeleteRouteImport
+      parentRoute: typeof AuthedProfileRoute
+    }
+    '/_authed/profile/organizer': {
+      id: '/_authed/profile/organizer'
+      path: '/organizer'
+      fullPath: '/profile/organizer'
+      preLoaderRoute: typeof AuthedProfileOrganizerRouteImport
+      parentRoute: typeof AuthedProfileRoute
+    }
+    '/_authed/profile/sessions': {
+      id: '/_authed/profile/sessions'
+      path: '/sessions'
+      fullPath: '/profile/sessions'
+      preLoaderRoute: typeof AuthedProfileSessionsRouteImport
+      parentRoute: typeof AuthedProfileRoute
+    }
+    '/_authed/profile/sign-in': {
+      id: '/_authed/profile/sign-in'
+      path: '/sign-in'
+      fullPath: '/profile/sign-in'
+      preLoaderRoute: typeof AuthedProfileSignInRouteImport
+      parentRoute: typeof AuthedProfileRoute
+    }
+    '/_authed/tickets/': {
+      id: '/_authed/tickets/'
+      path: '/tickets'
+      fullPath: '/tickets/'
+      preLoaderRoute: typeof AuthedTicketsIndexRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/tickets/$ticketId': {
+      id: '/_authed/tickets/$ticketId'
+      path: '/tickets/$ticketId'
+      fullPath: '/tickets/$ticketId'
+      preLoaderRoute: typeof AuthedTicketsTicketIdRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/events/_browse/': {
+      id: '/events/_browse/'
+      path: '/'
       fullPath: '/events/'
-      preLoaderRoute: typeof EventsIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof EventsBrowseIndexRouteImport
+      parentRoute: typeof EventsBrowseRoute
     }
-    '/events/$eventId': {
-      id: '/events/$eventId'
+    '/_authed/dashboard/events/': {
+      id: '/_authed/dashboard/events/'
+      path: '/events'
+      fullPath: '/dashboard/events/'
+      preLoaderRoute: typeof AuthedDashboardEventsIndexRouteImport
+      parentRoute: typeof AuthedDashboardRoute
+    }
+    '/_authed/dashboard/events/$eventId': {
+      id: '/_authed/dashboard/events/$eventId'
       path: '/events/$eventId'
-      fullPath: '/events/$eventId'
-      preLoaderRoute: typeof EventsEventIdRouteImport
-      parentRoute: typeof rootRouteImport
+      fullPath: '/dashboard/events/$eventId'
+      preLoaderRoute: typeof AuthedDashboardEventsEventIdRouteRouteImport
+      parentRoute: typeof AuthedDashboardRoute
     }
-    '/_admin/admin/audit': {
-      id: '/_admin/admin/audit'
-      path: '/admin/audit'
-      fullPath: '/admin/audit'
-      preLoaderRoute: typeof AdminAdminAuditRouteImport
-      parentRoute: typeof AdminRoute
+    '/_authed/dashboard/events/new': {
+      id: '/_authed/dashboard/events/new'
+      path: '/events/new'
+      fullPath: '/dashboard/events/new'
+      preLoaderRoute: typeof AuthedDashboardEventsNewRouteImport
+      parentRoute: typeof AuthedDashboardRoute
     }
-    '/_admin/admin/check-in': {
-      id: '/_admin/admin/check-in'
-      path: '/admin/check-in'
-      fullPath: '/admin/check-in'
-      preLoaderRoute: typeof AdminAdminCheckInRouteImport
-      parentRoute: typeof AdminRoute
+    '/_authed/tickets/orders/$enrollmentId': {
+      id: '/_authed/tickets/orders/$enrollmentId'
+      path: '/tickets/orders/$enrollmentId'
+      fullPath: '/tickets/orders/$enrollmentId'
+      preLoaderRoute: typeof AuthedTicketsOrdersEnrollmentIdRouteImport
+      parentRoute: typeof AuthedRoute
     }
-    '/_admin/admin/events': {
-      id: '/_admin/admin/events'
-      path: '/admin/events'
-      fullPath: '/admin/events'
-      preLoaderRoute: typeof AdminAdminEventsRouteImport
-      parentRoute: typeof AdminRoute
+    '/events/_browse/categories/$category': {
+      id: '/events/_browse/categories/$category'
+      path: '/categories/$category'
+      fullPath: '/events/categories/$category'
+      preLoaderRoute: typeof EventsBrowseCategoriesCategoryRouteImport
+      parentRoute: typeof EventsBrowseRoute
     }
-    '/_admin/admin/payments': {
-      id: '/_admin/admin/payments'
-      path: '/admin/payments'
-      fullPath: '/admin/payments'
-      preLoaderRoute: typeof AdminAdminPaymentsRouteImport
-      parentRoute: typeof AdminRoute
+    '/_authed/dashboard/events/$eventId/': {
+      id: '/_authed/dashboard/events/$eventId/'
+      path: '/'
+      fullPath: '/dashboard/events/$eventId/'
+      preLoaderRoute: typeof AuthedDashboardEventsEventIdIndexRouteImport
+      parentRoute: typeof AuthedDashboardEventsEventIdRouteRoute
     }
-    '/_admin/admin/users': {
-      id: '/_admin/admin/users'
-      path: '/admin/users'
-      fullPath: '/admin/users'
-      preLoaderRoute: typeof AdminAdminUsersRouteImport
-      parentRoute: typeof AdminRoute
+    '/_authed/dashboard/events/$eventId/invitations': {
+      id: '/_authed/dashboard/events/$eventId/invitations'
+      path: '/invitations'
+      fullPath: '/dashboard/events/$eventId/invitations'
+      preLoaderRoute: typeof AuthedDashboardEventsEventIdInvitationsRouteImport
+      parentRoute: typeof AuthedDashboardEventsEventIdRouteRoute
     }
-    '/_organizer/organizer/check-in': {
-      id: '/_organizer/organizer/check-in'
-      path: '/organizer/check-in'
-      fullPath: '/organizer/check-in'
-      preLoaderRoute: typeof OrganizerOrganizerCheckInRouteImport
-      parentRoute: typeof OrganizerRoute
+    '/_authed/dashboard/events/$eventId/participants': {
+      id: '/_authed/dashboard/events/$eventId/participants'
+      path: '/participants'
+      fullPath: '/dashboard/events/$eventId/participants'
+      preLoaderRoute: typeof AuthedDashboardEventsEventIdParticipantsRouteImport
+      parentRoute: typeof AuthedDashboardEventsEventIdRouteRoute
     }
-    '/_organizer/organizer/events/': {
-      id: '/_organizer/organizer/events/'
-      path: '/organizer/events'
-      fullPath: '/organizer/events/'
-      preLoaderRoute: typeof OrganizerOrganizerEventsIndexRouteImport
-      parentRoute: typeof OrganizerRoute
+    '/_authed/dashboard/events/$eventId/refunds': {
+      id: '/_authed/dashboard/events/$eventId/refunds'
+      path: '/refunds'
+      fullPath: '/dashboard/events/$eventId/refunds'
+      preLoaderRoute: typeof AuthedDashboardEventsEventIdRefundsRouteImport
+      parentRoute: typeof AuthedDashboardEventsEventIdRouteRoute
     }
-    '/_organizer/organizer/events/new': {
-      id: '/_organizer/organizer/events/new'
-      path: '/organizer/events/new'
-      fullPath: '/organizer/events/new'
-      preLoaderRoute: typeof OrganizerOrganizerEventsNewRouteImport
-      parentRoute: typeof OrganizerRoute
+    '/_authed/events/$slug/enroll/$ticketTypeId': {
+      id: '/_authed/events/$slug/enroll/$ticketTypeId'
+      path: '/events/$slug/enroll/$ticketTypeId'
+      fullPath: '/events/$slug/enroll/$ticketTypeId'
+      preLoaderRoute: typeof AuthedEventsSlugEnrollTicketTypeIdRouteImport
+      parentRoute: typeof AuthedRoute
     }
-    '/_organizer/organizer/events/$eventId/edit': {
-      id: '/_organizer/organizer/events/$eventId/edit'
-      path: '/organizer/events/$eventId/edit'
-      fullPath: '/organizer/events/$eventId/edit'
-      preLoaderRoute: typeof OrganizerOrganizerEventsEventIdEditRouteImport
-      parentRoute: typeof OrganizerRoute
+    '/_authed/dashboard/events/$eventId/tickets/': {
+      id: '/_authed/dashboard/events/$eventId/tickets/'
+      path: '/tickets'
+      fullPath: '/dashboard/events/$eventId/tickets/'
+      preLoaderRoute: typeof AuthedDashboardEventsEventIdTicketsIndexRouteImport
+      parentRoute: typeof AuthedDashboardEventsEventIdRouteRoute
     }
-    '/_organizer/organizer/events/$eventId/images': {
-      id: '/_organizer/organizer/events/$eventId/images'
-      path: '/organizer/events/$eventId/images'
-      fullPath: '/organizer/events/$eventId/images'
-      preLoaderRoute: typeof OrganizerOrganizerEventsEventIdImagesRouteImport
-      parentRoute: typeof OrganizerRoute
+    '/_authed/dashboard/events/$eventId/tickets/$ticketTypeId': {
+      id: '/_authed/dashboard/events/$eventId/tickets/$ticketTypeId'
+      path: '/tickets/$ticketTypeId'
+      fullPath: '/dashboard/events/$eventId/tickets/$ticketTypeId'
+      preLoaderRoute: typeof AuthedDashboardEventsEventIdTicketsTicketTypeIdRouteImport
+      parentRoute: typeof AuthedDashboardEventsEventIdRouteRoute
     }
-    '/_organizer/organizer/events/$eventId/sales': {
-      id: '/_organizer/organizer/events/$eventId/sales'
-      path: '/organizer/events/$eventId/sales'
-      fullPath: '/organizer/events/$eventId/sales'
-      preLoaderRoute: typeof OrganizerOrganizerEventsEventIdSalesRouteImport
-      parentRoute: typeof OrganizerRoute
+    '/_authed/dashboard/events/$eventId/tickets/new': {
+      id: '/_authed/dashboard/events/$eventId/tickets/new'
+      path: '/tickets/new'
+      fullPath: '/dashboard/events/$eventId/tickets/new'
+      preLoaderRoute: typeof AuthedDashboardEventsEventIdTicketsNewRouteImport
+      parentRoute: typeof AuthedDashboardEventsEventIdRouteRoute
     }
   }
 }
 
-interface AdminRouteChildren {
-  AdminAdminAuditRoute: typeof AdminAdminAuditRoute
-  AdminAdminCheckInRoute: typeof AdminAdminCheckInRoute
-  AdminAdminEventsRoute: typeof AdminAdminEventsRoute
-  AdminAdminPaymentsRoute: typeof AdminAdminPaymentsRoute
-  AdminAdminUsersRoute: typeof AdminAdminUsersRoute
+interface AuthedDashboardEventsEventIdRouteRouteChildren {
+  AuthedDashboardEventsEventIdInvitationsRoute: typeof AuthedDashboardEventsEventIdInvitationsRoute
+  AuthedDashboardEventsEventIdParticipantsRoute: typeof AuthedDashboardEventsEventIdParticipantsRoute
+  AuthedDashboardEventsEventIdRefundsRoute: typeof AuthedDashboardEventsEventIdRefundsRoute
+  AuthedDashboardEventsEventIdIndexRoute: typeof AuthedDashboardEventsEventIdIndexRoute
+  AuthedDashboardEventsEventIdTicketsTicketTypeIdRoute: typeof AuthedDashboardEventsEventIdTicketsTicketTypeIdRoute
+  AuthedDashboardEventsEventIdTicketsNewRoute: typeof AuthedDashboardEventsEventIdTicketsNewRoute
+  AuthedDashboardEventsEventIdTicketsIndexRoute: typeof AuthedDashboardEventsEventIdTicketsIndexRoute
 }
 
-const AdminRouteChildren: AdminRouteChildren = {
-  AdminAdminAuditRoute: AdminAdminAuditRoute,
-  AdminAdminCheckInRoute: AdminAdminCheckInRoute,
-  AdminAdminEventsRoute: AdminAdminEventsRoute,
-  AdminAdminPaymentsRoute: AdminAdminPaymentsRoute,
-  AdminAdminUsersRoute: AdminAdminUsersRoute,
+const AuthedDashboardEventsEventIdRouteRouteChildren: AuthedDashboardEventsEventIdRouteRouteChildren =
+  {
+    AuthedDashboardEventsEventIdInvitationsRoute:
+      AuthedDashboardEventsEventIdInvitationsRoute,
+    AuthedDashboardEventsEventIdParticipantsRoute:
+      AuthedDashboardEventsEventIdParticipantsRoute,
+    AuthedDashboardEventsEventIdRefundsRoute:
+      AuthedDashboardEventsEventIdRefundsRoute,
+    AuthedDashboardEventsEventIdIndexRoute:
+      AuthedDashboardEventsEventIdIndexRoute,
+    AuthedDashboardEventsEventIdTicketsTicketTypeIdRoute:
+      AuthedDashboardEventsEventIdTicketsTicketTypeIdRoute,
+    AuthedDashboardEventsEventIdTicketsNewRoute:
+      AuthedDashboardEventsEventIdTicketsNewRoute,
+    AuthedDashboardEventsEventIdTicketsIndexRoute:
+      AuthedDashboardEventsEventIdTicketsIndexRoute,
+  }
+
+const AuthedDashboardEventsEventIdRouteRouteWithChildren =
+  AuthedDashboardEventsEventIdRouteRoute._addFileChildren(
+    AuthedDashboardEventsEventIdRouteRouteChildren,
+  )
+
+interface AuthedDashboardRouteChildren {
+  AuthedDashboardApplicationsRoute: typeof AuthedDashboardApplicationsRoute
+  AuthedDashboardCategoriesRoute: typeof AuthedDashboardCategoriesRoute
+  AuthedDashboardUsersRoute: typeof AuthedDashboardUsersRoute
+  AuthedDashboardIndexRoute: typeof AuthedDashboardIndexRoute
+  AuthedDashboardEventsEventIdRouteRoute: typeof AuthedDashboardEventsEventIdRouteRouteWithChildren
+  AuthedDashboardEventsNewRoute: typeof AuthedDashboardEventsNewRoute
+  AuthedDashboardEventsIndexRoute: typeof AuthedDashboardEventsIndexRoute
 }
 
-const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
-
-interface AuthenticatedRouteChildren {
-  AuthenticatedOrdersRoute: typeof AuthenticatedOrdersRoute
-  AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
-  AuthenticatedTicketsRoute: typeof AuthenticatedTicketsRoute
+const AuthedDashboardRouteChildren: AuthedDashboardRouteChildren = {
+  AuthedDashboardApplicationsRoute: AuthedDashboardApplicationsRoute,
+  AuthedDashboardCategoriesRoute: AuthedDashboardCategoriesRoute,
+  AuthedDashboardUsersRoute: AuthedDashboardUsersRoute,
+  AuthedDashboardIndexRoute: AuthedDashboardIndexRoute,
+  AuthedDashboardEventsEventIdRouteRoute:
+    AuthedDashboardEventsEventIdRouteRouteWithChildren,
+  AuthedDashboardEventsNewRoute: AuthedDashboardEventsNewRoute,
+  AuthedDashboardEventsIndexRoute: AuthedDashboardEventsIndexRoute,
 }
 
-const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
-  AuthenticatedOrdersRoute: AuthenticatedOrdersRoute,
-  AuthenticatedProfileRoute: AuthenticatedProfileRoute,
-  AuthenticatedTicketsRoute: AuthenticatedTicketsRoute,
-}
-
-const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
-  AuthenticatedRouteChildren,
+const AuthedDashboardRouteWithChildren = AuthedDashboardRoute._addFileChildren(
+  AuthedDashboardRouteChildren,
 )
 
-interface OrganizerRouteChildren {
-  OrganizerOrganizerCheckInRoute: typeof OrganizerOrganizerCheckInRoute
-  OrganizerOrganizerEventsNewRoute: typeof OrganizerOrganizerEventsNewRoute
-  OrganizerOrganizerEventsIndexRoute: typeof OrganizerOrganizerEventsIndexRoute
-  OrganizerOrganizerEventsEventIdEditRoute: typeof OrganizerOrganizerEventsEventIdEditRoute
-  OrganizerOrganizerEventsEventIdImagesRoute: typeof OrganizerOrganizerEventsEventIdImagesRoute
-  OrganizerOrganizerEventsEventIdSalesRoute: typeof OrganizerOrganizerEventsEventIdSalesRoute
+interface AuthedProfileRouteChildren {
+  AuthedProfileDeleteRoute: typeof AuthedProfileDeleteRoute
+  AuthedProfileOrganizerRoute: typeof AuthedProfileOrganizerRoute
+  AuthedProfileSessionsRoute: typeof AuthedProfileSessionsRoute
+  AuthedProfileSignInRoute: typeof AuthedProfileSignInRoute
+  AuthedProfileIndexRoute: typeof AuthedProfileIndexRoute
 }
 
-const OrganizerRouteChildren: OrganizerRouteChildren = {
-  OrganizerOrganizerCheckInRoute: OrganizerOrganizerCheckInRoute,
-  OrganizerOrganizerEventsNewRoute: OrganizerOrganizerEventsNewRoute,
-  OrganizerOrganizerEventsIndexRoute: OrganizerOrganizerEventsIndexRoute,
-  OrganizerOrganizerEventsEventIdEditRoute:
-    OrganizerOrganizerEventsEventIdEditRoute,
-  OrganizerOrganizerEventsEventIdImagesRoute:
-    OrganizerOrganizerEventsEventIdImagesRoute,
-  OrganizerOrganizerEventsEventIdSalesRoute:
-    OrganizerOrganizerEventsEventIdSalesRoute,
+const AuthedProfileRouteChildren: AuthedProfileRouteChildren = {
+  AuthedProfileDeleteRoute: AuthedProfileDeleteRoute,
+  AuthedProfileOrganizerRoute: AuthedProfileOrganizerRoute,
+  AuthedProfileSessionsRoute: AuthedProfileSessionsRoute,
+  AuthedProfileSignInRoute: AuthedProfileSignInRoute,
+  AuthedProfileIndexRoute: AuthedProfileIndexRoute,
 }
 
-const OrganizerRouteWithChildren = OrganizerRoute._addFileChildren(
-  OrganizerRouteChildren,
+const AuthedProfileRouteWithChildren = AuthedProfileRoute._addFileChildren(
+  AuthedProfileRouteChildren,
+)
+
+interface AuthedRouteChildren {
+  AuthedDashboardRoute: typeof AuthedDashboardRouteWithChildren
+  AuthedProfileRoute: typeof AuthedProfileRouteWithChildren
+  AuthedTicketsTicketIdRoute: typeof AuthedTicketsTicketIdRoute
+  AuthedTicketsIndexRoute: typeof AuthedTicketsIndexRoute
+  AuthedTicketsOrdersEnrollmentIdRoute: typeof AuthedTicketsOrdersEnrollmentIdRoute
+  AuthedEventsSlugEnrollTicketTypeIdRoute: typeof AuthedEventsSlugEnrollTicketTypeIdRoute
+}
+
+const AuthedRouteChildren: AuthedRouteChildren = {
+  AuthedDashboardRoute: AuthedDashboardRouteWithChildren,
+  AuthedProfileRoute: AuthedProfileRouteWithChildren,
+  AuthedTicketsTicketIdRoute: AuthedTicketsTicketIdRoute,
+  AuthedTicketsIndexRoute: AuthedTicketsIndexRoute,
+  AuthedTicketsOrdersEnrollmentIdRoute: AuthedTicketsOrdersEnrollmentIdRoute,
+  AuthedEventsSlugEnrollTicketTypeIdRoute:
+    AuthedEventsSlugEnrollTicketTypeIdRoute,
+}
+
+const AuthedRouteWithChildren =
+  AuthedRoute._addFileChildren(AuthedRouteChildren)
+
+interface EventsBrowseRouteChildren {
+  EventsBrowseIndexRoute: typeof EventsBrowseIndexRoute
+  EventsBrowseCategoriesCategoryRoute: typeof EventsBrowseCategoriesCategoryRoute
+}
+
+const EventsBrowseRouteChildren: EventsBrowseRouteChildren = {
+  EventsBrowseIndexRoute: EventsBrowseIndexRoute,
+  EventsBrowseCategoriesCategoryRoute: EventsBrowseCategoriesCategoryRoute,
+}
+
+const EventsBrowseRouteWithChildren = EventsBrowseRoute._addFileChildren(
+  EventsBrowseRouteChildren,
 )
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AdminRoute: AdminRouteWithChildren,
-  AuthenticatedRoute: AuthenticatedRouteWithChildren,
-  OrganizerRoute: OrganizerRouteWithChildren,
+  AuthedRoute: AuthedRouteWithChildren,
+  ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,
-  EventsEventIdRoute: EventsEventIdRoute,
-  EventsIndexRoute: EventsIndexRoute,
+  RegisterRoute: RegisterRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
+  StatusRoute: StatusRoute,
+  EventsSlugRoute: EventsSlugRoute,
+  EventsBrowseRoute: EventsBrowseRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

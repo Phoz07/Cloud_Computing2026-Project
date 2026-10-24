@@ -1,7 +1,8 @@
-import { Link, useNavigate } from '@tanstack/react-router'
-import { LayoutDashboard, LogOut, ScanLine, Ticket } from 'lucide-react'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Button } from '@/components/ui/button'
+import { Link } from "@tanstack/react-router";
+import { LayoutDashboard, LogOut, Ticket, UserRound } from "lucide-react";
+import { RoleBadge } from "@/components/role-badge";
+import { UserAvatar } from "@/components/user-avatar";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,82 +11,64 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Skeleton } from '@/components/ui/skeleton'
-import { authClient, signOut } from '@/lib/auth'
+} from "@/components/ui/dropdown-menu";
+import { toast } from "@/components/ui/toast";
+import type { SessionUser } from "@/lib/auth-client";
+import { authErrorMessage } from "@/lib/auth-errors";
+import { hasRole, useSignOut } from "@/lib/session";
 
-type SessionUser = {
-  name?: string
-  email?: string
-  image?: string | null
-  role?: string
-}
-
-export function UserMenu() {
-  const navigate = useNavigate()
-  const { data: session, isPending } = authClient.useSession()
-
-  if (isPending) return <Skeleton className="h-9 w-24" />
-
-  if (!session) {
-    return <Button render={<Link to="/login" />}>Log in</Button>
-  }
-
-  const user = session.user as SessionUser
-  const role = user.role
-  const initial = user.name?.trim().charAt(0).toUpperCase() || '?'
+export function UserMenu({ user }: { user: SessionUser }) {
+  const signOut = useSignOut();
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={<Button variant="ghost" className="gap-2 px-2" />}
-        aria-label="Account menu"
+        render={<Button variant="ghost" size="icon-lg" className="rounded-full" />}
+        aria-label="เมนูผู้ใช้"
       >
-        <Avatar className="size-7">
-          <AvatarImage src={user.image ?? undefined} alt="" />
-          <AvatarFallback>{initial}</AvatarFallback>
-        </Avatar>
-        <span className="hidden max-w-32 truncate sm:inline">{user.name}</span>
+        <UserAvatar user={user} />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
+      <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuGroup>
-          <DropdownMenuLabel className="max-w-56 truncate font-normal text-muted-foreground">
-            {user.email}
+          <DropdownMenuLabel className="flex flex-col gap-1">
+            <span className="truncate font-medium text-foreground">{user.name}</span>
+            <span className="truncate">{user.email}</span>
+            <RoleBadge role={user.role} />
           </DropdownMenuLabel>
-          <DropdownMenuSeparator />
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
           <DropdownMenuItem render={<Link to="/tickets" />}>
-            <Ticket data-icon="inline-start" />
-            Tickets
+            <Ticket />
+            ตั๋วของฉัน
           </DropdownMenuItem>
-          <DropdownMenuItem render={<Link to="/orders" />}>
-            <LayoutDashboard data-icon="inline-start" />
-            Orders
+          <DropdownMenuItem render={<Link to="/profile" />}>
+            <UserRound />
+            โปรไฟล์
           </DropdownMenuItem>
-          {role === 'organizer' || role === 'admin' ? (
-            <DropdownMenuItem render={<Link to="/organizer/events" />}>
-              <LayoutDashboard data-icon="inline-start" />
-              Organizer
+          {hasRole(user, ["organizer", "admin"]) && (
+            <DropdownMenuItem render={<Link to="/dashboard" />}>
+              <LayoutDashboard />
+              แดชบอร์ด
             </DropdownMenuItem>
-          ) : null}
-          {role === 'admin' ? (
-            <DropdownMenuItem render={<Link to="/admin/users" />}>
-              <ScanLine data-icon="inline-start" />
-              Admin
-            </DropdownMenuItem>
-          ) : null}
-          <DropdownMenuSeparator />
+          )}
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
           <DropdownMenuItem
             variant="destructive"
-            onClick={async () => {
-              await signOut()
-              await navigate({ to: '/' })
-            }}
+            disabled={signOut.isPending}
+            onClick={() =>
+              signOut.mutate(undefined, {
+                onError: (error) => toast.add({ type: "error", title: authErrorMessage(error) }),
+              })
+            }
           >
-            <LogOut data-icon="inline-start" />
-            Log out
+            <LogOut />
+            ออกจากระบบ
           </DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
-  )
+  );
 }

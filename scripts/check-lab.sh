@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Learner Lab capability probe. Prints NO secrets.
-# Usage: paste lab creds into ~/.aws/credentials [default], then: bash check-lab.sh
+# Usage: paste the lab creds into infra/aws.env (see infra/aws.env.example), then:
+#   bash scripts/check-lab.sh
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+. "$ROOT/scripts/lib.sh"
+load_aws_env
 p() { printf '\n=== %s ===\n' "$1"; }
 
 p "IDENTITY"
@@ -55,6 +59,14 @@ if [ -n "$NODEROLE" ]; then
   aws iam list-attached-role-policies --role-name "$NODEROLE" \
     --query 'AttachedPolicies[].PolicyName' --output text
 fi
+
+p "SQS  (decides the mail queue: real SQS vs an ElasticMQ pod — infra/terraform/sqs.tf)"
+aws sqs list-queues --output text 2>&1 | tail -2
+
+p "S3 account-level Public Access Block  (decides /files via the public/* bucket policy — infra/terraform/s3.tf)"
+aws s3control get-public-access-block \
+  --account-id "$(aws sts get-caller-identity --query Account --output text)" 2>&1 | tail -3
+echo "NoSuchPublicAccessBlockConfiguration = no account-level block = the public/* policy will apply."
 
 p "Route 53 / ACM / CloudFront  (UNVERIFIED — decides the whole TLS design)"
 echo "--- route53 ---";    aws route53 list-hosted-zones --query 'HostedZones[].Name' --output text 2>&1 | tail -2
