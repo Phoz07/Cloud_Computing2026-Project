@@ -299,7 +299,7 @@ These are hard and load-bearing — most odd design choices trace back to one of
   The lab auto-stops EC2 only; RDS, the EKS control plane and ELBs keep billing. Worker
   nodes are in an ASG that relaunches lab-stopped instances.
 - **No IRSA** (`iam:CreateOpenIDConnectProvider` denied) — also no GitHub Actions OIDC, so
-  CI checks + builds only and deploy is a local script. Pods get the lab **session
+  CI deploys with the session credentials stored as GitHub secrets (`make ci-creds`, see **CI/CD** below). Pods get the lab **session
   credentials** (S3 + SQS) through the `eventide-common` Secret; they expire with the
   session — `make deploy` every session.
 - **No `iam:CreateRole`** — Terraform reuses the lab's `LabEksClusterRole` / `LabEksNodeRole`
@@ -356,8 +356,28 @@ These are hard and load-bearing — most odd design choices trace back to one of
 after registering in the web) · `make load BASE_URL=…` (k6 vs `/api/events`) · `make down`
 (`teardown.sh`: `platform=false` + proof — every session end). Credentials: `infra/aws.env`.
 `bash scripts/check-lab.sh` after every lab reset. CI (`.github/
-workflows/ci.yml`) runs the compose-backed tests, the web build and all 7 image builds —
-no AWS.
+workflows/ci.yml`): `check` (compose-backed tests incl. mail-worker, web typecheck + build),
+`images` (all 7 builds) on PRs and main; `deploy` on push to main — see **CI/CD** below.
+`make secrets` copies Google/Gmail/Stripe from the root `.env` into the gitignored
+`infra/terraform/*.auto.tfvars` (names/status only are printed), applies just those Secrets
+Manager secrets and refreshes the outputs; `make ci-creds [DEPLOY=1]` stores `infra/aws.env`
+as the `AWS_*` GitHub secrets.
+
+### CI/CD (push to `main` → AWS)
+
+- The Learner Lab has no OIDC federation, so the `deploy` job authenticates with the session
+  credentials in the repository secrets `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` /
+  `AWS_SESSION_TOKEN`. They expire with the lab session (~4 h): **after every Start Lab run
+  `make ci-creds DEPLOY=1`** (updates the secrets and re-deploys).
+- The job **skips with a notice, never fails**, when the secrets are missing/expired or the
+  platform is down — it must not clobber a working cluster with stale credentials. It runs
+  `scripts/deploy.sh` (build + push 7 images, 4 k8s Secrets, helm upgrade — the `db-migrate`
+  hook migrates first) then curls `/api/*/health` and `/api/events/og/site`.
+- `terraform apply` (`make up` / `make down`) stays manual, for cost. Google/Gmail/Stripe live
+  in Secrets Manager (via `make secrets`), so CI never holds them. Google sign-in is only
+  enabled when the public URL is `https://` (Google rejects http redirect URIs).
+- The pods' own AWS credentials (S3 + SQS, `eventide-common`) are whatever the last deploy
+  injected — they stop working when that session ends, so redeploy each session.
 
 ### Rules that cause slow, confusing bugs if broken
 
@@ -375,8 +395,13 @@ no AWS.
 - HPA max is **8 replicas** — a `t3.medium` allows only 17 pods; beyond the ceiling pods sit
   `Pending` with an error that looks like a bug. Run the load test with
   `NODE_INSTANCE_TYPE=t3.medium make up`.
-- Image size floor is Bun 1.4's `--compile` runtime (~104 MB per binary); the migrate image
-  is ~250 MB. Pushing over a VPN has stalled before — push off-VPN or lower the MTU.
+- `auth`/`registration`/`payment` are `bun build --compile` binaries (Bun 1.4's floor is ~104 MB
+  each). `event`, `mail-worker` and `web` are **bundled files on `oven/bun:1-slim`** instead,
+  because they need files at runtime: event's OG renderer (`takumi-js`, a native addon + a
+  font read from `node_modules`; those two stay external and are installed next to the
+  bundle), mail-worker's `emails/static/logo.png` (path from `import.meta.dir`), and the web
+  Bun server (`server/index.js` + `dist/`). A compiled binary has none of that. The migrate
+  image is ~250 MB. Pushing over a VPN has stalled before — push off-VPN or lower the MTU.
 
 ### Open blockers (see `docs/TODO.md` §0)
 

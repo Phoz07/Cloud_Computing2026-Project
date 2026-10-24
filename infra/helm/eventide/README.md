@@ -7,7 +7,7 @@ One release, every workload of the v2 app:
 | `auth`, `event`, `registration`, `payment` | Deployment + Service + Ingress path | `eventide/<name>` | `/api/auth`, `/api/events`, `/api/regis`, `/api/payment`; probes on `/api/<prefix>/health` |
 | `mail-worker` | Deployment only | `eventide/mail-worker` | SQS consumer, no HTTP, no probes |
 | `redis` | Deployment + Service `:6379` | `redis:8-alpine` (public) | session cache for `@app/auth-guard`; no persistence |
-| `web` | Deployment + Service + Ingress `/` | `eventide/web` | static SPA on nginx-unprivileged |
+| `web` | Deployment + Service + Ingress `/` | `eventide/web` | Bun server: serves `dist/` + injects per-URL `<head>` (Open Graph); needs `BETTER_AUTH_URL`, `EVENT_SERVICE_URL` |
 | `files` | ExternalName Service + Ingress `/files/(.*)` | — | rewrites to `/<bucket>/$1` on S3 (EKS) or MinIO (k3d) |
 | `db-migrate` | Job, `pre-install,pre-upgrade` hook | `eventide/db-bootstrap` | `drizzle-kit migrate` before pods roll |
 | `event` HPA | HorizontalPodAutoscaler | — | AWS overlay only, 2 → 8 on 60 % CPU |

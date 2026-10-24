@@ -1,4 +1,4 @@
-.PHONY: dev db-reset tf-init up plan deploy admin load down k3d k3d-down help
+.PHONY: dev db-reset tf-init up plan secrets ci-creds deploy admin load down k3d k3d-down help
 
 # Learner Lab credentials live in infra/aws.env (copy infra/aws.env.example).
 # Every AWS target sources it; Terraform and the AWS CLI read the same variables.
@@ -28,6 +28,18 @@ up: tf-init ## terraform apply — permanent layer + EKS + RDS + NLB + ingress-n
 
 plan: ## terraform plan (no changes)
 	$(AWSENV) $(TF) plan -input=false
+
+secrets: ## copy Google/Gmail/Stripe from .env into the gitignored tfvars, apply ONLY those Secrets Manager secrets
+	bash scripts/sync-secrets.sh
+	$(AWSENV) $(TF) apply -auto-approve -input=false \
+	  -target=aws_secretsmanager_secret.google_oauth -target=aws_secretsmanager_secret_version.google_oauth \
+	  -target=aws_secretsmanager_secret.gmail -target=aws_secretsmanager_secret_version.gmail \
+	  -target=aws_secretsmanager_secret.stripe -target=aws_secretsmanager_secret_version.stripe
+	# a targeted apply leaves the root outputs stale; deploy.sh and CI read the secret names from them
+	$(AWSENV) $(TF) apply -refresh-only -auto-approve -input=false
+
+ci-creds: ## store this lab session's infra/aws.env credentials as GitHub secrets (CI/CD deploy); add DEPLOY=1 to deploy now
+	$(AWSENV) bash scripts/ci-creds.sh $(if $(DEPLOY),--deploy)
 
 deploy: ## build+push the 7 images to ECR, create the k8s Secrets, helm upgrade (migrates first), roll out
 	$(AWSENV) bash scripts/deploy.sh

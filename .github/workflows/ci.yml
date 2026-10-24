@@ -1,15 +1,20 @@
 name: ci
 
-# Checks only — tests against the compose stack, the web build, and every image
-# build. NO AWS / EKS interaction: deploy to EKS is a local script
-# (scripts/deploy.sh), because GitHub Actions cannot assume a role in the
-# Learner Lab account (no OIDC provider, static creds expire in 4h —
-# SYSTEM-DESIGN §9). Images are built here to prove the Dockerfiles, not pushed.
+# check + images: tests against the compose stack, the web build, every image build
+# (pull requests and main).
+# deploy: on push to main (or run by hand), runs scripts/deploy.sh against the live
+# EKS cluster. The Learner Lab has no OIDC federation, so the only way in is the
+# session credentials stored as the AWS_* repository secrets by `make ci-creds`;
+# they expire with the lab session (~4 h). The job therefore SKIPS, with a notice
+# and no failure, when the secrets are missing/expired or the platform is down
+# (`make down`) — it never clobbers a working cluster with stale credentials.
+# It only deploys; `make up` / `make down` (terraform apply) stay manual, for cost.
 
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -41,7 +46,7 @@ jobs:
       - run: bun run db:migrate
       - name: test the packages and services that have a test script
         run: |
-          for p in packages/auth-guard packages/storage apps/auth apps/event apps/registration apps/payment; do
+          for p in packages/auth-guard packages/storage apps/auth apps/event apps/registration apps/payment apps/mail-worker; do
             echo "== $p =="
             (cd "$p" && bun run test) || exit 1
           done
@@ -63,3 +68,46 @@ jobs:
             *) f="apps/${{ matrix.image }}/Dockerfile" ;;
           esac
           docker build -f "$f" -t "eventide/${{ matrix.image }}:ci" .
+
+  deploy:
+    needs: check
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-eks
+      cancel-in-progress: false
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      AWS_DEFAULT_REGION: us-east-1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - name: AWS reachable and platform up?
+        id: gate
+        run: |
+          set -u
+          if [ -z "$AWS_ACCESS_KEY_ID" ] || ! ACCOUNT="$(aws sts get-caller-identity --query Account --output text 2>/dev/null)"; then
+            echo "::notice title=deploy skipped::AWS credentials are missing or expired — run \`make ci-creds DEPLOY=1\` after Start Lab"
+            echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          terraform -chdir=infra/terraform init -input=false -backend-config="bucket=eventide-tfstate-${ACCOUNT}" >/dev/null
+          if [ -z "$(terraform -chdir=infra/terraform output -raw nlb_dns_name 2>/dev/null)" ]; then
+            echo "::notice title=deploy skipped::the platform is down (make down) — run \`make up\` first"
+            echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+      - name: deploy (build, push, secrets, helm — migrations run first)
+        if: steps.gate.outputs.ok == 'true'
+        run: bash scripts/deploy.sh
+      - name: smoke
+        if: steps.gate.outputs.ok == 'true'
+        run: |
+          NLB="$(terraform -chdir=infra/terraform output -raw nlb_dns_name)"
+          for p in auth events regis payment; do
+            curl -fsS --retry 6 --retry-delay 5 --retry-all-errors "http://$NLB/api/$p/health" >/dev/null && echo "ok $p"
+          done
+          curl -fsS --retry 6 --retry-delay 5 --retry-all-errors "http://$NLB/api/events/og/site" -o /dev/null -w "og/site %{http_code} %{content_type}\n"
