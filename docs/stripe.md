@@ -74,8 +74,8 @@ bunx stripe sandbox create --from-git    # หรือ --email you@example.com
 
    | Resource | สิทธิ์ | ใช้ที่ |
    |---|---|---|
-   | Checkout Sessions (`checkout_session_write`) | Write | `checkout.sessions.create` ใน `routes/checkout/service.ts` |
-   | Charges and Refunds (`charge_write`) | Write | `refunds.create` ใน `libs/refund.ts` (ผู้ซื้อ/ผู้จัดงานคืนเงิน และเงินที่เข้าหลังหมดเวลาจอง) |
+   | Checkout Sessions (`checkout_session_write`) | Write | `checkout.sessions.create` และ `retrieve` (ตรวจสอบการชำระเงิน) ใน `routes/checkout/service.ts` |
+   | Charges and Refunds (`charge_write`) | Write | `charges.list` (จ่ายด้วยบัตรหรือไม่), `refunds.list` และ `refunds.create` ใน `libs/refund.ts` (ผู้ซื้อ/ผู้จัดงานคืนเงิน และเงินที่เข้าหลังหมดเวลาจอง) |
 
 3. คัดลอกคีย์ไปใส่ `.env` ที่ root: `STRIPE_SECRET_KEY=rk_test_…`
 
@@ -171,8 +171,8 @@ bun run stripe:listen    # เปิดในเทอร์มินัลแ�
 
 | อาการ | สาเหตุ | วิธีแก้ |
 |---|---|---|
-| จ่ายแล้วแต่บิลค้าง "รอชำระเงิน" และเทอร์มินัล `stripe:listen` ไม่ขึ้นอะไรเลย | ไม่ได้รัน `stripe:listen` หรือ CLI อยู่คนละ sandbox กับ `STRIPE_SECRET_KEY` | รัน `bun run stripe:listen`, เช็กด้วย `bunx stripe whoami` แล้วส่ง event ซ้ำ (ด้านล่าง) |
-| กดชำระเงินซ้ำแล้ว Stripe ขึ้น "คุณดำเนินการเสร็จเรียบร้อยแล้ว / ชำระเงินรายการนี้เรียบร้อยแล้ว" | จ่ายไปแล้วแต่ webhook ไม่มาถึง บิลจึงยัง `pending` และปุ่มชำระเงินพากลับไปที่ session เดิมที่จ่ายแล้ว | ไม่ต้องจ่ายซ้ำ ส่ง event ซ้ำ (ด้านล่าง) |
+| จ่ายแล้วแต่บิลค้าง "รอชำระเงิน" และเทอร์มินัล `stripe:listen` ไม่ขึ้นอะไรเลย | ไม่ได้รัน `stripe:listen` หรือ CLI อยู่คนละ sandbox กับ `STRIPE_SECRET_KEY` | กด "ตรวจสอบการชำระเงิน" ในหน้ารายการสั่งซื้อ แล้วรัน `bun run stripe:listen` และเช็กด้วย `bunx stripe whoami` |
+| Stripe ขึ้น "You're all done here" แต่บิลยัง "รอชำระเงิน" | จ่ายไปแล้วแต่ webhook ไม่มาถึง และเปิดลิงก์ session เดิมซ้ำ (เช่น กดย้อนกลับ) ปุ่มชำระเงินของเราตรวจกับ Stripe ก่อนแล้ว จึงไม่พากลับไปที่ session ที่จ่ายแล้ว | ไม่ต้องจ่ายซ้ำ กด "ตรวจสอบการชำระเงิน" หรือ "ชำระเงิน" ในหน้ารายการสั่งซื้อ |
 | ตั้งค่าครบแล้ว แต่บิลที่จ่ายไว้ก่อนเปิด `stripe:listen` ยังค้าง | `stripe listen` ส่งต่อเฉพาะ event ที่เกิดหลังเริ่มรัน | ส่ง event ซ้ำ (ด้านล่าง) |
 | ขึ้น `<-- [400]` | `STRIPE_WEBHOOK_SECRET` ไม่ตรง หรือยังไม่ได้รีสตาร์ต `bun run dev` หลังแก้ `.env` | ใส่ `whsec_…` จาก `stripe:listen` รีสตาร์ต แล้วส่ง event ซ้ำ |
 | ขึ้น `<-- [500]` | handler พัง เช่น DB ล่ม หรือคีย์ไม่มีสิทธิ์ refund | ดู log ของ `apps/payment` แก้ต้นเหตุ แล้วส่ง event ซ้ำ |
@@ -180,9 +180,10 @@ bun run stripe:listen    # เปิดในเทอร์มินัลแ�
 | กดชำระเงินแล้วขึ้น "ระบบชำระเงินขัดข้อง" | สร้าง Checkout session ไม่ได้ เช่น ไม่ได้ตั้ง `STRIPE_SECRET_KEY` คีย์ผิด หรือคีย์ไม่มีสิทธิ์ Checkout Sessions | ดู log `Failed to create a Stripe Checkout session` ของ `apps/payment` |
 | กดคืนเงินแล้วขึ้น "ระบบคืนเงินขัดข้อง" | เรียก `refunds.create` ไม่สำเร็จ เช่น คีย์ไม่มีสิทธิ์ Charges and Refunds หรือ Stripe ล่ม รายการยังไม่ถูกยกเลิก | ดู log `Failed to create a Stripe refund` แก้ต้นเหตุแล้วกดใหม่ |
 | กดคืนเงินแล้วขึ้น "Stripe คืนเงินรายการนี้ไม่ได้" | Stripe ปฏิเสธ เช่น ชำระนานเกินกำหนดคืนเงิน หรือคืนเงินไปแล้วจาก Dashboard ของ Stripe | ดู log เดียวกันว่า Stripe ตอบอะไร แล้วคืนเงินทางอื่น |
+| คืนเงินรายการ PromptPay แล้วได้ "รอข้อมูลบัญชี" ไม่ได้คืนผ่าน Stripe | ตั้งใจให้เป็นแบบนี้ Stripe คืนเงินอัตโนมัติเฉพาะบัตร ช่องทางอื่น Stripe ต้องส่งอีเมลขอเลขบัญชีจากผู้ซื้อ (บัญชีที่ยังไม่ยืนยันอีเมลจะได้ `Cannot send email…`) เราจึงส่งอีเมลให้ผู้ซื้อติดต่อเราเอง | โอนคืนให้ผู้ซื้อตามข้อมูลที่ติดต่อมา (ดู `docs/tickets.md` หัวข้อการคืนเงิน) |
 | payment service ไม่ยอมเริ่ม: `Refusing to use a live Stripe key outside production` | ใส่ live key ในเครื่อง | ใช้คีย์ของ sandbox |
 
-**กู้บิลที่ค้าง:** event ไม่หายไปไหน แก้ต้นเหตุก่อน แล้วสั่งส่งซ้ำมาที่ `stripe:listen` ที่เปิดอยู่
+**กู้บิลที่ค้าง:** วิธีที่ง่ายที่สุดคือให้ผู้ซื้อกด "ตรวจสอบการชำระเงิน" ในหน้ารายการสั่งซื้อ (`POST /api/payment/checkout/verify` ถาม Stripe โดยตรง ไม่ต้องพึ่ง webhook) `stripe listen` ไม่ส่งซ้ำเองเมื่อส่งต่อไม่สำเร็จ แต่ event ยังอยู่ แก้ต้นเหตุแล้วสั่งส่งซ้ำมาที่ `stripe:listen` ที่เปิดอยู่ได้
 
 ```sh
 bunx stripe events list --type=checkout.session.completed --limit=5    # หา evt_…
@@ -223,8 +224,9 @@ bunx stripe events resend evt_…
 | `package.json` (root) | สคริปต์ `stripe:listen` และ devDependency `@stripe/cli` |
 | `.env.example` | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` |
 | `apps/payment/src/libs/stripe.ts` | Stripe client, กันใช้ live key นอก production, `webhookSecret` |
-| `apps/payment/src/routes/checkout/` | สร้างหรือใช้ Checkout session เดิม |
+| `apps/payment/src/routes/checkout/` | สร้างหรือใช้ Checkout session เดิม, ตรวจสอบการชำระเงินกับ Stripe |
+| `apps/payment/src/libs/settle.ts` | ยืนยันหรือปิดการลงทะเบียนเมื่อ session จบ ใช้ทั้ง webhook และการตรวจสอบการชำระเงิน |
 | `apps/payment/src/routes/refunds/` | ผู้ซื้อขอคืนเงินตามนโยบาย, ผู้จัดงานคืนเงินเต็มจำนวน, ประวัติการคืนเงินของอีเวนต์ |
-| `apps/payment/src/libs/refund.ts` | `refunds.create` พร้อม idempotency key และบันทึกลงตาราง `refunds` |
+| `apps/payment/src/libs/refund.ts` | `refunds.create` (หรือใช้ refund ที่รอบก่อนสร้างแต่ยังไม่ได้บันทึก) และบันทึกลงตาราง `refunds` |
 | `apps/payment/src/routes/webhook/` | ตรวจลายเซ็นและจัดการ 6 event |
 | `docs/tickets.md` | วงจรการชำระเงิน การคืนเงิน และข้อจำกัด |

@@ -115,7 +115,7 @@ function OrderCard({ order }: { order: Enrollment }) {
           {order.ticketType.name} × {order.quantity} · {formatPrice(order.total)}
         </CardDescription>
         <CardAction>
-          <EnrollmentStatusBadge enrollment={order} />
+          <EnrollmentStatusBadge enrollment={order} className="items-end" />
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-wrap items-center justify-between gap-3">

@@ -18,8 +18,8 @@ export const ticketTypeRoutes = new Elysia()
       response: TicketTypeModel.ByIdTicketTypesGet.Response,
     },
     async ({ params, viewer }) => {
-      const row = await findVisibleEvent(params.id, viewer);
-      return row instanceof Error ? row : listTicketTypes(row.event.id);
+      const event = await findVisibleEvent(params.id, viewer);
+      return event instanceof Error ? event : listTicketTypes(event.id);
     },
   )
   .post(

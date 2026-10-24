@@ -283,8 +283,11 @@ describe("approval", () => {
     const approved = await json(await request("POST", `/enrollments/${first.id}/approve`, "admin"));
     expect(approved.status).toBe("awaiting_payment");
     expect(new Date(approved.expiresAt).getTime()).toBeGreaterThan(Date.now() + 71 * 3_600_000);
-    expect(enqueueMail.mock.calls[0]![0]).toMatchObject({ to: emailOf("buyer") });
-    expect(enqueueMail.mock.calls[0]![0].html).toContain(`/tickets/orders/${first.id}`);
+    expect(enqueueMail.mock.calls[0]![0]).toMatchObject({
+      to: emailOf("buyer"),
+      template: "enrollment-approved",
+      props: { payBy: approved.expiresAt, url: expect.stringContaining(`/tickets/orders/${first.id}`) },
+    });
 
     enqueueMail.mockClear();
     const second = await json(await enroll(type.id));
@@ -292,7 +295,8 @@ describe("approval", () => {
       await request("POST", `/enrollments/${second.id}/reject`, "owner", { note: "เต็มแล้ว <b>" }),
     );
     expect(rejected.status).toBe("rejected");
-    expect(enqueueMail.mock.calls[0]![0].html).toContain("เต็มแล้ว &lt;b&gt;");
+    // raw: the template escapes it
+    expect(enqueueMail.mock.calls[0]![0]).toMatchObject({ template: "enrollment-rejected", props: { reason: "เต็มแล้ว <b>" } });
   });
 
   test("the organizer lists enrollments with counts per status, and finds attendees by email", async () => {

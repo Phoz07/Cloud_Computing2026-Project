@@ -1,7 +1,7 @@
 import {
   and, asc, count, db, desc, eq, eventInvitations, events, ilike, inArray, isNotNull, isNull, or, users,
 } from "@app/db";
-import { enqueueMail } from "@app/mail";
+import { enqueueMail, type MailMessage } from "@app/mail";
 import { invitationTaken } from "@app/tickets";
 import { HTTPError } from "elysia";
 import { isForeignKeyViolation, isUniqueViolation } from "../../libs/errors";
@@ -53,23 +53,22 @@ const toInvitation = ({ invitation, user }: Row): InvitationModel.Invitation => 
 const newestFirst = [desc(eventInvitations.createdAt), asc(eventInvitations.id)];
 
 const appUrl = process.env.BETTER_AUTH_URL ?? "http://localhost:5173";
-// mail is read away from the browser, so the time is spelled out in Thailand's zone
-const eventTime = new Intl.DateTimeFormat("th-TH", { dateStyle: "full", timeStyle: "short", timeZone: "Asia/Bangkok" });
 
-type MailEvent = { title: string; slug: string; venue: string; startsAt: Date };
+type InvitedEvent = { title: string; slug: string; venue: string; startsAt: Date };
 
 /** `name`: the invitee's account name, or undefined when they have no account yet (they're sent to sign up). */
-function invitationMail(event: MailEvent, email: string, name: string | undefined) {
+function invitationMail(event: InvitedEvent, email: string, name: string | undefined): MailMessage {
   const path = `/events/${event.slug}`;
-  const link = name ? `${appUrl}${path}` : `${appUrl}/register?redirect=${encodeURIComponent(path)}`;
+  const url = name ? `${appUrl}${path}` : `${appUrl}/register?redirect=${encodeURIComponent(path)}`;
   return {
-    subject: `คุณได้รับเชิญเข้าร่วม ${event.title}`,
-    html:
-      `<p>สวัสดี${name ? `คุณ ${Bun.escapeHTML(name)}` : ""}</p>` +
-      `<p>คุณได้รับเชิญเข้าร่วมอีเวนต์ <strong>${Bun.escapeHTML(event.title)}</strong></p>` +
-      `<p>วันเวลา: ${eventTime.format(event.startsAt)}<br>สถานที่: ${Bun.escapeHTML(event.venue)}</p>` +
-      `<p>อีเวนต์นี้เปิดให้เฉพาะผู้ได้รับเชิญ กรุณา${name ? "เข้าสู่ระบบ" : "สมัครสมาชิก"}ด้วยอีเมล ${Bun.escapeHTML(email)} เพื่อดูรายละเอียดและลงทะเบียน</p>` +
-      `<p><a href="${link}">${name ? "ดูอีเวนต์" : "สมัครสมาชิกและดูอีเวนต์"}</a></p>`,
+    to: email,
+    template: "event-invitation",
+    props: {
+      name: name ?? null,
+      email,
+      event: { title: event.title, venue: event.venue, startsAt: event.startsAt.toISOString() },
+      url,
+    },
   };
 }
 
@@ -104,7 +103,7 @@ export async function sendPendingInvitations(eventId: string) {
     const failed: string[] = [];
     await Promise.all(
       claimed.map((row) =>
-        enqueueMail({ to: row.email, ...invitationMail(event, row.email, names.get(row.email)) }).catch((error) => {
+        enqueueMail(invitationMail(event, row.email, names.get(row.email))).catch((error) => {
           console.error("Failed to enqueue invitation mail", error);
           failed.push(row.id);
         }),

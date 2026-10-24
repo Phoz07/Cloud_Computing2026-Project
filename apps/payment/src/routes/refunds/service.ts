@@ -1,5 +1,5 @@
 import { alias, and, count, db, desc, enrollments, eq, events, payments, refunds, sql, ticketTypes, users } from "@app/db";
-import { EnrollmentNotFound, markCancelled, refundTerms } from "@app/tickets";
+import { announceSeats, EnrollmentNotFound, markCancelled, refundTerms } from "@app/tickets";
 import { HTTPError } from "elysia";
 import { mailCancellation } from "../../libs/mail";
 import { issueRefund } from "../../libs/refund";
@@ -78,12 +78,13 @@ async function cancelAndRefund(enrollmentId: string, requester: Requester) {
     });
     if (refund instanceof Error) return refund;
     await markCancelled(tx, enrollment);
-    return refund;
+    return { refund, eventId: enrollment.eventId };
   });
   if (result instanceof Error) return result;
+  announceSeats(result.eventId);
   // awaited (one mail per attendee, at most 10); it never throws
-  await mailCancellation(result);
-  return toRefund(result);
+  await mailCancellation(result.refund);
+  return toRefund(result.refund);
 }
 
 export const refundAsBuyer = (buyerId: string, enrollmentId: string) =>

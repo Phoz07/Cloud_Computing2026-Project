@@ -5,6 +5,7 @@ import {
   deleteFile,
   FileTooLarge,
   ownedKey,
+  readFile,
   setStorageAdapter,
   storeFile,
   UnsupportedFile,
@@ -91,6 +92,17 @@ describe("deleteFile", () => {
 
   test("does not throw for a missing key", async () => {
     await expect(deleteFile(`public/users/${userId}/avatar/${crypto.randomUUID()}`)).resolves.toBeUndefined();
+  });
+});
+
+describe("readFile", () => {
+  test("returns the stored bytes", async () => {
+    const file = stored(await storeFile("avatar", userId, new File([png], "a.png")));
+    expect(new Uint8Array((await readFile(file.key))!)).toEqual(png);
+  });
+
+  test("is null for a missing key", async () => {
+    expect(await readFile(`public/users/${userId}/avatar/${crypto.randomUUID()}`)).toBeNull();
   });
 });
 

@@ -1,5 +1,6 @@
 import { DeleteMessageCommand, ReceiveMessageCommand, type Message } from "@aws-sdk/client-sqs";
 import { mailQueueUrl, parseMailMessage, sqs } from "@app/mail";
+import { renderMail } from "./render";
 import { from, isDryRun, transporter } from "./transporter";
 
 const shutdown = new AbortController();
@@ -9,6 +10,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 
 // Failed messages are not deleted: they reappear after the visibility timeout
 // and move to mail-dlq after maxReceiveCount (see infra/elasticmq/elasticmq.conf).
+// That includes a template that throws on its props, so a fixed template can redrive them.
 async function handle(message: Message) {
   const mail = parseMailMessage(message.Body);
   if (!mail) {
@@ -17,8 +19,14 @@ async function handle(message: Message) {
   }
 
   try {
-    const info = await transporter.sendMail({ from, ...mail });
-    if (isDryRun) console.log(`[dry-run] ${info.message}`);
+    const rendered = await renderMail(mail);
+    if (!rendered) {
+      console.error(`Unknown mail template in ${message.MessageId}`, message.Body);
+      return;
+    }
+
+    const info = await transporter.sendMail({ from, to: mail.to, ...rendered });
+    if (isDryRun) console.log(`[dry-run] to ${mail.to}: ${rendered.subject}\n${rendered.text}`);
     else console.log(`Sent mail ${info.messageId} to ${mail.to}`);
 
     await sqs.send(

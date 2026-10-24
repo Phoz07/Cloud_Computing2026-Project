@@ -26,9 +26,15 @@ Eventide: an event ticketing website built as a Bun-workspace monorepo of micros
   - On each request the guard forwards the cookie to `AUTH_SERVICE_URL/api/auth/get-session` and caches the answer in Redis for 60s.
   - `databaseHooks` in `apps/auth/src/libs/auth.ts` write a revoked marker on ban, role change and sign-out, so those apply on the next request. Anything else that changes a role or deletes sessions outside Better Auth must call `markUserRevoked()`.
   - Design, diagrams and failure modes: `docs/auth.md`.
-- **Email:** nothing sends mail inline. Producers call `enqueueMail()` from `@app/mail`, which puts a message on the SQS `mail-queue`. `apps/mail-worker` consumes the queue and sends with **Nodemailer over Gmail SMTP**.
-  - A message is deleted only after it sends. Failures are retried and land in `mail-dlq` after 5 receives.
-  - Without `GMAIL_USER` / `GMAIL_APP_PASSWORD`, the worker runs dry and logs the rendered mail instead of sending it.
+- **Email:** nothing sends mail inline. Producers call `enqueueMail({ to, template, props })` from `@app/mail`, which puts a message on the SQS `mail-queue`. `apps/mail-worker` consumes the queue, renders the template and sends with **Nodemailer over Gmail SMTP**.
+  - Producers send data, never HTML. Each template's props are typed in `packages/mail/src/templates.ts`: raw strings (React escapes them), dates as ISO strings and amounts in baht. The subject, the wording and all formatting live in the template.
+  - Templates are **React Email** (`react-email`) in `apps/mail-worker/emails/<template>.tsx`. Each one default-exports the component with `PreviewProps` and exports `subject(props)`. They share `MailLayout` and the blocks in `emails/_components/` (`EventDetails`, `CtaButton`, `Note`, `RefundOutcome`, …).
+  - The Tailwind theme (`_components/theme.ts`) copies the web's tokens under the same names, in hex because mail clients don't read oklch. Use px values, not rem.
+  - `src/render.tsx` registers every template, renders HTML plus a plain-text part and attaches the logo inline (`cid:logo@eventide`, from `emails/static/logo.png`).
+  - Adding a mail means adding its props to `MailTemplates`, adding `emails/<name>.tsx` and adding a registry entry; a missing entry is a type error.
+  - Preview: `bun run --filter @app/mail-worker preview` (http://localhost:3010).
+  - A message is deleted only after it sends. Failures are retried and land in `mail-dlq` after 5 receives. That includes a template that throws on its props, so a fixed template can redrive them. A message with an unknown template is logged and left to reach the DLQ the same way.
+  - Without `GMAIL_USER` / `GMAIL_APP_PASSWORD`, the worker runs dry and logs each mail's recipient, subject and plain text instead of sending it.
 
 ## Commands
 
@@ -46,11 +52,13 @@ bun run db:studio             # Drizzle Studio
 
 bun run --filter @app/web lint    # oxlint (web only, no lint config elsewhere)
 bun run --filter @app/web build   # tsc -b && vite build
+bun run --filter @app/web start   # production server for the built web (dist/ + per-URL Open Graph tags)
+bun run --filter @app/mail-worker preview   # React Email preview of every mail template on :3010
 ```
 
 **Type checking:** run `bun check` from **inside** a workspace (`cd apps/web && bun check`; `cd apps/event && bun check src/index.ts`). The root `bun run typecheck` reads the root tsconfig, which has no DOM lib and no `@/*` alias, so it reports false errors in `apps/web`.
 
-**Tests:** use `bun test` (`import { test, expect } from "bun:test"`). Suites that need env or infra get a `test` script that passes `--env-file=../../.env`; run them with `bun run test` inside `packages/auth-guard`, `packages/storage`, `apps/auth`, `apps/event`, `apps/registration` or `apps/payment` (they need `infra:up`). The `test` scripts of `apps/event`, `apps/registration` and `apps/payment` run each file in its own process, because the auth mock (`mock.module`) leaks between files. For a single file use `bun test test/event.test.ts`, and for a single test use `bun test -t "pattern"`.
+**Tests:** use `bun test` (`import { test, expect } from "bun:test"`). Suites that need env or infra get a `test` script that passes `--env-file=../../.env`; run them with `bun run test` inside `packages/auth-guard`, `packages/storage`, `apps/auth`, `apps/event`, `apps/registration` or `apps/payment` (they need `infra:up`). `apps/mail-worker` also has a `test` script, which renders every template and needs no infra. The `test` scripts of `apps/event`, `apps/registration` and `apps/payment` run each file in its own process, because the auth mock (`mock.module`) leaks between files. For a single file use `bun test test/event.test.ts`, and for a single test use `bun test -t "pattern"`.
 
 **shadcn CLI:** `components.json` lives in `apps/web`, so run `cd apps/web && bunx shadcn@latest add <component>`. The shadcn MCP server is configured in `.mcp.json`.
 
@@ -71,22 +79,22 @@ bun run --filter @app/web build   # tsc -b && vite build
 
 ### Workspaces
 
-- `apps/web` (`@app/web`): Vite + React 19 SPA on :5173. Uses TanStack Router (file-based), TanStack Query and shadcn/ui.
+- `apps/web` (`@app/web`): Vite + React 19 SPA on :5173. Uses TanStack Router (file-based), TanStack Query and shadcn/ui. `server/` holds its production server and the per-URL `<head>` (see **Link previews** below).
 - One Elysia service per domain, each with its own process, port and path prefix:
 
   | Workspace | Port | Prefix | Owns |
   |---|---|---|---|
   | `apps/auth` | 3001 | `/api/auth` | Better Auth: accounts, sessions, roles, bans |
-  | `apps/event` | 3002 | `/api/events` | events (CRUD, slug, status, refund policy, HTML description), categories (admin-only), cover + gallery, invitations (who may open an `invite`-status event, by email), ticket types and their registration forms (`ticket_types`, `ticket_type_questions`) |
-  | `apps/registration` | 3003 | `/api/regis` | seat availability, enrollments (enroll, approve / reject), tickets ("my tickets"), check-in |
+  | `apps/event` | 3002 | `/api/events` | events (CRUD, slug, status, refund policy, HTML description, a Redis cache of the detail, Open Graph images), categories (admin-only), cover + gallery, invitations (who may open an `invite`-status event, by email), ticket types and their registration forms (`ticket_types`, `ticket_type_questions`) |
+  | `apps/registration` | 3003 | `/api/regis` | seat availability (plus a live WebSocket feed), enrollments (enroll, approve / reject), tickets ("my tickets"), check-in |
   | `apps/payment` | 3004 | `/api/payment` | Stripe Checkout for enrollments, the Stripe webhook, refunds (`payments`, `refunds`) |
 
-- `apps/mail-worker`: an SQS consumer with no HTTP server. It sends queued mail through Gmail.
+- `apps/mail-worker`: an SQS consumer with no HTTP server. It renders queued mail with the React Email templates in `emails/` and sends it through Gmail. It is the only workspace that depends on React besides the web.
 - `packages/db` (`@app/db`): the Drizzle schema and client that every service shares.
 - `packages/auth-guard` (`@app/auth-guard`): roles and permissions (`./permissions`, browser-safe, also used by the web), the session introspection + Redis cache, and the `authGuard` Elysia plugin.
-- `packages/mail` (`@app/mail`): the mail queue contract. It holds the `MailMessage` type, the shared `sqs` client, `enqueueMail()` for producers and `parseMailMessage()` for the worker.
+- `packages/mail` (`@app/mail`): the mail queue contract. It holds the `MailMessage` / `MailContent` types (a template name plus its props, from `src/templates.ts`), the shared `sqs` client, `enqueueMail()` for producers and `parseMailMessage()` for the worker.
 - `packages/storage` (`@app/storage`): file storage that each service imports (a library, not a service), built on [files-sdk](https://files-sdk.dev) over Bun's S3 client. See **Files** below.
-- `packages/tickets` (`@app/tickets`): ticket issuing shared by registration and payment (a library): which enrollments hold seats, confirming one, mailing its tickets. See **Tickets** below.
+- `packages/tickets` (`@app/tickets`): ticket issuing shared by registration and payment (a library): which enrollments hold seats, confirming one, mailing its tickets, announcing seat changes. See **Tickets** below.
 - `services/*` is declared as a workspace glob but is unused. Root `bun run dev` only starts `apps/*`.
 
 The generic Bun advice doesn't fully apply here. The web app **does** use Vite (not Bun HTML imports), and the DB layer uses Drizzle on the **postgres.js** driver (not `Bun.sql`). Elsewhere in services, prefer Bun built-ins (`Bun.redis`, `s3`, `Bun.file`, `Bun.$`).
@@ -165,18 +173,53 @@ test/<feature>.test.ts
 - **An enrollment** (`apps/registration`) is one order: `quantity` tickets with one attendee each (`tickets`: name, lowercase email, `answers` copied with their labels).
   - Statuses: `pending` (approval) → `awaiting_payment` (paid) → `confirmed`, or `rejected` / `expired`.
   - **Active** = `confirmed`, `pending`, or `awaiting_payment` whose `expires_at` is ahead (`activeEnrollment()`). A lapsed hold stops counting at once, with no job; reads show it as `expired` (`effectiveStatus()`).
-  - **Seats:** anything that counts seats against the quota first locks the `ticket_types` row (`SELECT … FOR UPDATE`): enrolling, quota edits and `confirmEnrollment()`.
+  - **Seats:** anything that counts seats against the quota first locks the `ticket_types` row (`SELECT … FOR UPDATE`): enrolling, seat holds, quota edits and `confirmEnrollment()`.
   - "My tickets" shows confirmed tickets the account bought **or** that carry its email.
+- **Seat holds** (`apps/registration`, table `seat_holds`): opening the enroll page of a `first_come` type holds 1 seat for 10 minutes (`POST /ticket-types/:id/hold`), and the form's ticket count resizes it (`PATCH`, same deadline). The web counts down and offers to hold again once it lapses.
+  - One hold per account and ticket type. Asking again while it runs returns it unchanged, so a reload or another device carries on with it.
+  - `seatsTaken()` counts active holds (`activeHold()`) with active enrollments, and holds count toward `maxPerUser`. `enroll()` leaves the buyer's own hold out of the count and deletes it; the enrollment then holds the seats (35 minutes when paid). A lapsed hold stops counting at once, like a payment hold.
+- **Live seats:** the event page, the enroll page and the organizer's ticket pages keep their seat counts current over a WebSocket (`/api/regis/events/:eventId/availability/live`, `useLiveSeats()` in the web).
+  - Anything that changes seat counts or the list of ticket types must call `announceSeats(eventId)` from `@app/tickets` **after its transaction commits**. It publishes to the Redis channel `seats:changed`, never throws and doesn't wait.
+  - `apps/registration/src/routes/availability/feed.ts` recounts only the events its own sockets watch (at most every 250 ms each, plus a timer for the next lapsing hold, plus a 30s resync in case Redis lost a message) and fans out with Bun's `server.publish`.
+  - The socket carries only the counts everyone shares (`held` among them). `mine`, `hold` and `state` still come from the GET, and the web re-derives `sold_out` with `withLiveSeats()`, which must match `getAvailability()`.
 - **Payment** (`apps/payment`): `POST /checkout` makes (or reuses) a Stripe Checkout session; `POST /webhook` (`parse: 'none'`, `constructEventAsync`, since the SDK verifies with SubtleCrypto under Bun) confirms the enrollment, or refunds a payment that arrived after its hold lapsed and the seats went.
+  - When the webhook never arrives, `POST /checkout/verify` (the order page's "ตรวจสอบการชำระเงิน") asks Stripe about the order's pending sessions and settles them the way the webhook would (`src/libs/settle.ts`). `POST /checkout` does the same first, so it never sends the buyer back to a session that has already been paid.
   - Paid first_come / invite enrollments hold seats for 35 minutes (the 30-minute session plus slack); approved paid ones have 72 hours to pay.
   - Dev: set `STRIPE_WEBHOOK_SECRET` to the `whsec_…` that `bun run stripe:listen` prints (the Stripe CLI needs the events named; the script lists the six events the webhook handles).
   - Stripe setup, from creating a sandbox and a restricted key to the production webhook endpoint: `docs/stripe.md`.
 - **Refunds** (`apps/payment`, table `refunds`) are whole-order and cancel the enrollment (`cancelled`, `markCancelled()`), which frees its seats and invitation.
   - The buyer (`POST /refunds`) gets the policy's percent until `starts_at − cutoff`. The policy is the one snapshotted onto `enrollments.refund_percent` / `refund_cutoff_hours` at enroll time, and `refundTerms()` in `@app/tickets` is the one place that reads it.
   - The organizer or an admin (`POST /enrollments/:id/refund`) refunds 100% at any time.
-  - `issueRefund()` (`src/libs/refund.ts`) uses the idempotency key `refund-<paymentId>`, so a payment is refunded at most once. Stripe refunds are async (PromptPay starts at `requires_action`, and a card refund can fail later), so `refund.updated` / `refund.failed` keep `refunds.status` current.
+  - `issueRefund()` (`src/libs/refund.ts`) refunds through Stripe only a card payment (`charges.list` tells). Anything else (PromptPay) would need Stripe to email the buyer for a bank account, so it is refunded **by hand**: recorded as `requires_action` with a null `stripe_refund_id`, and the buyer's mail (`libs/mail.ts` sends `manual: true`) asks them to send their order number (the enrollment id) and bank account to the contact channels (`refundContacts` in `apps/mail-worker/emails/_components/refund-claim.tsx`, mock values). Marking such a refund done isn't built yet.
+  - For a card, it first looks for a refund Stripe already made for the payment but we never recorded (`refunds.list`, matched on `metadata.paymentId`) and records that one, so a payment is refunded at most once. There is no fixed idempotency key, because Stripe replays a refused request under the same key for 24 hours, even after its cause is fixed. A card refund can fail later, so `refund.updated` / `refund.failed` keep `refunds.status` current.
 - Enrollments keep their event, ticket type and invitation with `ON DELETE RESTRICT`, so those services answer `EVENT_HAS_ENROLLMENTS`, `TICKET_TYPE_IN_USE` and `INVITATION_USED` instead.
 - Design, lifecycle diagrams and failure modes: `docs/tickets.md`.
+
+### Event cache: `apps/event`
+
+- `GET /api/events/:id` (by uuid or slug) and every route that loads an event through `findVisibleEvent()` read the event detail from Redis first (`src/libs/event-cache.ts`).
+  - Keys: `event:id:<uuid>` holds the detail JSON (the API's `EventDetail`), and `event:slug:<slug>` holds the id. TTL is 5 minutes.
+  - Visibility is still decided per request from the cached detail (status, `publishAt`, organizer) plus the invitation lookup, so one entry serves every viewer.
+  - Lists (`GET /`, `/mine`), the `eventOwner` macro and other services read Postgres directly.
+- **Every write to an event must update the cache after it commits:** `refreshEvent(id, previousSlug?)` re-reads the event and replaces the entry, so the next read already sees it.
+  - It is called by create, update (including status, slug and suspension) and cover changes. A delete calls `forgetDeletedEvent()`, which leaves a `gone` marker on the id for one TTL. A category rename calls `forgetCategoryEvents()`, since entries embed the category.
+  - Readers fill the cache only with `NX`, and refreshes don't overwrite `gone`, so a read or update that raced a write can't put an old copy back.
+- Redis failures fall through to Postgres: slower, never wrong.
+
+### Link previews (Open Graph)
+
+Crawlers (LINE, Facebook, X, Discord) read only the HTML and never run the SPA, so the server puts each URL's tags into it.
+
+- **Images** (`apps/event/src/routes/og`): `GET /api/events/og/site`, `/og/events/:id` (uuid or slug) and `/og/categories/:slug` return 1200×630 JPEGs. Takumi (`takumi-js`) renders the node trees in `cards.ts` with Google Sans (latin + thai woff2 from `@fontsource-variable/google-sans`).
+  - They read events as an anonymous viewer (`findVisibleEvent(id, null)`), so a draft, scheduled, invite-only or suspended event answers 404 like a missing one.
+  - Covers come from `readFile()` in `@app/storage`. Takumi skips bytes it can't decode, and a failed render is retried without images.
+  - Dates are formatted in `Asia/Bangkok` (`format.ts`), because the server's time zone is arbitrary.
+- **Tags** (`apps/web/server/head.ts`): `resolveHead()` builds the title, description, canonical link and `og:*` / `twitter:card` tags; `injectHead()` puts them between the `<!--head-->` and `<!--/head-->` markers in `index.html`.
+  - It reads the event service without a cookie (`EVENT_SERVICE_URL`), waits at most 1.5 s, and otherwise falls back to the site's card. Every value goes through `escapeHtml`, since titles are user input.
+  - Absolute URLs use `BETTER_AUTH_URL` as the public origin, like the links in mail.
+  - An event's image URL carries `?v=<updatedAt>`, so an edit gives crawlers a new URL. The images themselves are cached for a day (categories for an hour).
+  - Dev: the Vite plugin `server/head-plugin.ts` fills the block per request (and with the defaults at build time). Production: `bun run --filter @app/web start` (`server/index.ts`, port 3000) serves `dist/` and fills it per request. The reverse proxy sends `/api/*`, `/files/*` and the WebSocket to the services and the bucket, and everything else to it.
+  - The SPA keeps the tab title current with `usePageTitle()` (`src/hooks/use-page-title.ts`), which resets to "Eventide" when the page unmounts. Titles go through `pageTitle()` in `src/lib/site.ts`, which the server shares.
 
 ### Frontend: `apps/web`
 

@@ -48,8 +48,10 @@ export function TicketTypeEditor({ event, ticketType, availability }: TicketType
   const allowLeave = useRef(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const held = availability ? availability.confirmed + availability.reserved + availability.pending : 0;
+  // seats someone holds while filling in the enroll form count toward the quota too
+  const taken = held + (availability?.held ?? 0);
   // the service refuses to change the kind once anyone holds tickets of it
-  const kindLocked = !!ticketType && held > 0;
+  const kindLocked = !!ticketType && taken > 0;
   const listParams = { eventId: event.id };
 
   const refresh = () =>
@@ -200,7 +202,7 @@ export function TicketTypeEditor({ event, ticketType, availability }: TicketType
                             suffix="ใบ"
                             description={
                               availability?.remaining != null && ticketType
-                                ? `จองไปแล้ว ${held.toLocaleString()} ใบ ลดได้ไม่ต่ำกว่านี้`
+                                ? `จองไปแล้ว ${taken.toLocaleString()} ใบ ลดได้ไม่ต่ำกว่านี้`
                                 : "ปิดรับเมื่อตั๋วหมด"
                             }
                             disabled={locked}
@@ -304,6 +306,7 @@ export function TicketTypeEditor({ event, ticketType, availability }: TicketType
                   <dl className="grid grid-cols-2 gap-3 text-sm">
                     <Stat label="ยืนยันแล้ว" value={availability.confirmed} />
                     {ticketType.price > 0 && <Stat label="รอชำระเงิน" value={availability.reserved} />}
+                    {ticketType.kind === "first_come" && <Stat label="กำลังกรอกข้อมูล" value={availability.held} />}
                     {ticketType.kind === "approval" && <Stat label="รออนุมัติ" value={availability.pending} />}
                     {availability.remaining !== null && <Stat label="เหลือ" value={availability.remaining} />}
                   </dl>

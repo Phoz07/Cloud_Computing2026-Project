@@ -58,11 +58,9 @@ export const auth = betterAuth({
     enabled: true,
     // Not awaited so response timing doesn't reveal whether the email exists.
     sendResetPassword: async ({ user, url }) => {
-      enqueueMail({
-        to: user.email,
-        subject: "รีเซ็ตรหัสผ่าน Eventide",
-        html: `<p>กดลิงก์ด้านล่างเพื่อตั้งรหัสผ่านใหม่</p><p><a href="${url}">ตั้งรหัสผ่านใหม่</a></p><p>หากคุณไม่ได้ขอรีเซ็ตรหัสผ่าน ไม่ต้องดำเนินการใดๆ</p>`,
-      }).catch((error) => console.error("Failed to enqueue reset password mail", error));
+      enqueueMail({ to: user.email, template: "reset-password", props: { url } }).catch((error) =>
+        console.error("Failed to enqueue reset password mail", error),
+      );
     },
   },
   user: {

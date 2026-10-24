@@ -3,16 +3,23 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun --env-file=../../.env --watch src/index.ts"
+    "dev": "bun --env-file=../../.env --watch src/index.ts",
+    "preview": "email dev --dir emails --port 3010",
+    "test": "bun test"
   },
   "main": "src/index.ts",
   "dependencies": {
     "@app/mail": "workspace:*",
     "@aws-sdk/client-sqs": "^3.1156.0",
-    "nodemailer": "^10.2.1"
+    "nodemailer": "^10.2.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-email": "^6.11.3"
   },
   "devDependencies": {
+    "@react-email/ui": "^6.11.3",
     "@types/nodemailer": "^8.0.2",
+    "@types/react": "^19.3.0",
     "typescript": "^7.0.2"
   }
 }

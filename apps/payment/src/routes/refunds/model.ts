@@ -3,7 +3,8 @@ import { t, type UnwrapModels, type UnwrapSchema } from "elysia";
 const Id = t.String({ format: "uuid" });
 const NullableString = t.Union([t.String(), t.Null()]);
 
-// Stripe's statuses; requires_action: Stripe asked the buyer where to send the money (e.g. PromptPay)
+// Stripe's statuses; requires_action: a refund made by hand (not a card payment, e.g. PromptPay),
+// waiting for the buyer to send us their order number and bank account
 export const RefundStatus = t.Union([
   t.Literal("pending"),
   t.Literal("requires_action"),

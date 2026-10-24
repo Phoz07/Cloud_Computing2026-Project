@@ -88,3 +88,17 @@ export async function deleteFile(key: string | null | undefined) {
     console.error(`Failed to delete ${key}`, error);
   }
 }
+
+/**
+ * The bytes of a stored file, e.g. a cover to draw into an OG image. Null when it's missing or
+ * storage fails (logged), so a caller can carry on without it. Never throws.
+ */
+export async function readFile(key: string) {
+  try {
+    const file = await (plain ??= new Files({ adapter: currentAdapter() })).download(key);
+    return await file.arrayBuffer();
+  } catch (error) {
+    if (!(error instanceof FilesError && error.code === "NotFound")) console.error(`Failed to read ${key}`, error);
+    return null;
+  }
+}

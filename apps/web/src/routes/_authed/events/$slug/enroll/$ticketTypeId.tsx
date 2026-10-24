@@ -1,9 +1,9 @@
 import { useForm, useStore } from "@tanstack/react-form";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
-  ArrowLeft, CalendarClock, ClipboardList, CreditCard, ListChecks, Mail, MapPin, Minus, Plus, Send, Ticket, TicketCheck,
-  TicketX, UserRound,
+  ArrowLeft, CalendarClock, ClipboardList, CreditCard, ListChecks, Mail, MapPin, Minus, Plus, RotateCcw, Send, Ticket,
+  TicketCheck, TicketX, Timer, TimerOff, UserRound,
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { z } from "zod";
@@ -18,14 +18,20 @@ import { Field, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { paymentClient, registrationClient } from "@/lib/api";
 import { problemMessage } from "@/lib/auth-errors";
 import { availabilityQueryOptions, enrollmentsKey, splitName, type Availability } from "@/lib/enrollments";
-import { eventQueryOptions, type EventDetail } from "@/lib/events";
+import { eventQueryOptions, problemCode, type EventDetail } from "@/lib/events";
 import { formatDateRange, formatPrice } from "@/lib/format";
 import { isEmail } from "@/lib/invitations";
+import { useLiveSeats } from "@/lib/live-seats";
+import {
+  formatTimeLeft, resizeSeatHold, seatHoldKey, seatHoldQueryOptions, startSeatHold, useTimeLeft, type SeatHold,
+} from "@/lib/seat-holds";
 import { useSession } from "@/lib/session";
+import { cn } from "@/lib/utils";
 import {
   kindInfo, LONG_TEXT_MAX, SHORT_TEXT_MAX, ticketTypesQueryOptions, type Question, type TicketType,
 } from "@/lib/ticket-types";
@@ -51,6 +57,14 @@ function EnrollPage() {
     ...availabilityQueryOptions(event?.id ?? ""),
     enabled: !!event,
   });
+  // the quantity picker's maximum follows the seats left
+  useLiveSeats(event?.id);
+  const ticketType = types?.find((type) => type.id === ticketTypeId);
+  const state = availability?.find((a) => a.ticketTypeId === ticketTypeId);
+  // first_come is the kind with a quota, so its seats are held while the form is filled in;
+  // the service answers a running hold (a reload, another device) as it is
+  const holdsSeats = ticketType?.kind === "first_come";
+  const hold = useQuery({ ...seatHoldQueryOptions(ticketTypeId), enabled: holdsSeats && state?.state === "open" });
 
   const back = (
     <Link to="/events/$slug" params={{ slug }} className={buttonVariants({ variant: "outline" })}>
@@ -59,7 +73,8 @@ function EnrollPage() {
     </Link>
   );
 
-  if (eventPending || typesPending || (event && availabilityPending)) {
+  const holdPending = holdsSeats && state?.state === "open" && hold.isPending;
+  if (eventPending || typesPending || (event && availabilityPending) || holdPending) {
     return (
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 py-4" aria-busy="true" aria-label="กำลังโหลด">
         <Skeleton className="h-10 w-2/3" />
@@ -70,8 +85,6 @@ function EnrollPage() {
       </div>
     );
   }
-  const ticketType = types?.find((type) => type.id === ticketTypeId);
-  const state = availability?.find((a) => a.ticketTypeId === ticketTypeId);
   if (isError || !event || !ticketType || !state) {
     return (
       <Empty>
@@ -86,7 +99,9 @@ function EnrollPage() {
       </Empty>
     );
   }
-  if (state.state !== "open") {
+  // the hold may be what took the last seats, as the live seats then say
+  const blocked = state.state !== "open" && !(state.state === "sold_out" && hold.data);
+  if (blocked || (holdsSeats && hold.isError)) {
     return (
       <Empty>
         <EmptyHeader>
@@ -94,7 +109,9 @@ function EnrollPage() {
             {state.state === "limit_reached" ? <TicketCheck /> : <TicketX />}
           </EmptyMedia>
           <EmptyTitle>ลงทะเบียน {ticketType.name} ไม่ได้</EmptyTitle>
-          <EmptyDescription>{unavailable[state.state]}</EmptyDescription>
+          <EmptyDescription>
+            {state.state !== "open" ? unavailable[state.state] : problemMessage(hold.error)}
+          </EmptyDescription>
         </EmptyHeader>
         <EmptyContent className="flex-row flex-wrap justify-center">
           {back}
@@ -108,7 +125,15 @@ function EnrollPage() {
       </Empty>
     );
   }
-  return <EnrollForm key={ticketType.id} event={event} ticketType={ticketType} availability={state} />;
+  return (
+    <EnrollForm
+      key={ticketType.id}
+      event={event}
+      ticketType={ticketType}
+      availability={state}
+      hold={holdsSeats ? (hold.data ?? null) : null}
+    />
+  );
 }
 
 type AttendeeValues = { firstName: string; lastName: string; email: string; answers: string[] };
@@ -164,7 +189,18 @@ function useEnrollForm(options: {
 
 type EnrollFormApi = ReturnType<typeof useEnrollForm>;
 
-function EnrollForm({ event, ticketType, availability }: { event: EventDetail; ticketType: TicketType; availability: Availability }) {
+function EnrollForm({
+  event,
+  ticketType,
+  availability,
+  hold,
+}: {
+  event: EventDetail;
+  ticketType: TicketType;
+  availability: Availability;
+  // the seats held while the form is filled in (first_come), from seatHoldQueryOptions
+  hold: SeatHold | null;
+}) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: session } = useSession();
@@ -174,14 +210,49 @@ function EnrollForm({ event, ticketType, availability }: { event: EventDetail; t
   const [redirecting, setRedirecting] = useState(false);
   const paid = ticketType.price > 0;
   const approval = ticketType.kind === "approval";
+  const timeLeft = useTimeLeft(hold?.deadline);
+  const expired = timeLeft === 0;
+  // seats left don't count the ones this hold already has
+  const held = hold && !expired ? hold.quantity : 0;
   // the account's limit and the seats left, whichever is lower
-  const max = Math.max(1, Math.min(ticketType.maxPerUser - availability.mine, availability.remaining ?? Infinity));
+  const max = Math.max(1, Math.min(ticketType.maxPerUser - availability.mine, (availability.remaining ?? Infinity) + held));
 
+  // as many attendees as the hold has seats (another device may have changed them)
   const [defaults] = useState((): EnrollValues => {
     const user = session?.user;
     const first = emptyAttendee(questions);
-    return { attendees: [user ? { ...first, ...splitName(user), email: user.email } : first] };
+    const others = Array.from({ length: (hold?.quantity ?? 1) - 1 }, () => emptyAttendee(questions));
+    return { attendees: [user ? { ...first, ...splitName(user), email: user.email } : first, ...others] };
   });
+
+  const setHold = (next: SeatHold) => queryClient.setQueryData(seatHoldKey(ticketType.id), next);
+  const resize = useMutation({ mutationFn: (quantity: number) => resizeSeatHold(ticketType.id, quantity) });
+  const holdAgain = useMutation({
+    mutationFn: (quantity: number) => startSeatHold(ticketType.id, quantity),
+    onSuccess: (next) => {
+      setHold(next);
+      toast.add({ type: "success", title: "จองที่นั่งใหม่แล้ว", description: "กรอกข้อมูลต่อได้เลย" });
+    },
+    onError: (error) => {
+      toast.add({ type: "error", title: problemMessage(error) });
+      void queryClient.invalidateQueries({ queryKey: enrollmentsKey });
+    },
+  });
+
+  /** Changes the ticket count, resizing a running hold first (the seats may have gone meanwhile). */
+  const changeQuantity = async (quantity: number, apply: () => void) => {
+    if (hold && !expired) {
+      try {
+        setHold(await resize.mutateAsync(quantity));
+      } catch (error) {
+        toast.add({ type: "error", title: problemMessage(error) });
+        // ran out by the service's clock a moment before this one's
+        if (problemCode(error) === "HOLD_EXPIRED") setHold({ ...hold, deadline: 0 });
+        return;
+      }
+    }
+    apply();
+  };
 
   const toOrder = (enrollmentId: string) => navigate({ to: "/tickets/orders/$enrollmentId", params: { enrollmentId } });
 
@@ -193,6 +264,9 @@ function EnrollForm({ event, ticketType, availability }: { event: EventDetail; t
       focusFirstInvalid(ROOT);
     },
     onSubmit: async ({ value }) => {
+      if (expired) {
+        return void toast.add({ type: "error", title: "หมดเวลาจองที่นั่งแล้ว", description: "กดจองที่นั่งใหม่เพื่อลงทะเบียนต่อ" });
+      }
       const { data, error } = await registrationClient.api.regis.enrollments.post({
         ticketTypeId: ticketType.id,
         attendees: value.attendees.map((attendee) => ({
@@ -238,6 +312,8 @@ function EnrollForm({ event, ticketType, availability }: { event: EventDetail; t
   const values = useStore(form.store, (state) => state.values);
   const isSubmitting = useStore(form.store, (state) => state.isSubmitting);
   const quantity = values.attendees.length;
+  // shown while the limit or the seats allow more than one, or the form already has more
+  const picksQuantity = max > 1 || quantity > 1;
   const dirty = JSON.stringify(values) !== JSON.stringify(defaults);
   const { icon: KindIcon, label: kindLabel } = kindInfo[ticketType.kind];
 
@@ -265,41 +341,49 @@ function EnrollForm({ event, ticketType, availability }: { event: EventDetail; t
         <form.Field name="attendees" mode="array">
           {(field) => (
             <div className="flex min-w-0 flex-col gap-6">
-              {max > 1 && (
+              {(picksQuantity || hold) && (
                 <Card size="sm">
-                  <CardContent className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex flex-col">
-                      <span className="flex items-center gap-2 font-medium">
-                        <Ticket className="size-4 text-muted-foreground" />
-                        จำนวนตั๋ว
-                      </span>
-                      <span className="text-sm text-muted-foreground">1 ใบต่อผู้เข้าร่วม 1 คน · เลือกได้สูงสุด {max} ใบ</span>
-                    </div>
-                    <div className="flex items-center gap-3" role="group" aria-label="จำนวนตั๋ว">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        aria-label="ลดจำนวนตั๋ว"
-                        disabled={quantity <= 1}
-                        onClick={() => field.removeValue(quantity - 1)}
-                      >
-                        <Minus />
-                      </Button>
-                      <span className="w-8 text-center text-lg font-semibold tabular-nums" aria-live="polite">
-                        {quantity}
-                      </span>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        aria-label="เพิ่มจำนวนตั๋ว"
-                        disabled={quantity >= max}
-                        onClick={() => field.pushValue(emptyAttendee(questions))}
-                      >
-                        <Plus />
-                      </Button>
-                    </div>
+                  <CardContent className="flex flex-col gap-4">
+                    {picksQuantity && (
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex flex-col">
+                          <span className="flex items-center gap-2 font-medium">
+                            <Ticket className="size-4 text-muted-foreground" />
+                            จำนวนตั๋ว
+                          </span>
+                          <span className="text-sm text-muted-foreground">1 ใบต่อผู้เข้าร่วม 1 คน · เลือกได้สูงสุด {max} ใบ</span>
+                        </div>
+                        <div className="flex items-center gap-3" role="group" aria-label="จำนวนตั๋ว">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            aria-label="ลดจำนวนตั๋ว"
+                            disabled={quantity <= 1 || resize.isPending}
+                            onClick={() => changeQuantity(quantity - 1, () => field.removeValue(quantity - 1))}
+                          >
+                            <Minus />
+                          </Button>
+                          <span className="w-8 text-center text-lg font-semibold tabular-nums" aria-live="polite">
+                            {quantity}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            aria-label="เพิ่มจำนวนตั๋ว"
+                            disabled={quantity >= max || resize.isPending}
+                            onClick={() => changeQuantity(quantity + 1, () => field.pushValue(emptyAttendee(questions)))}
+                          >
+                            <Plus />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    {picksQuantity && hold && <Separator />}
+                    {hold && timeLeft !== undefined && (
+                      <HoldStatus timeLeft={timeLeft} pending={holdAgain.isPending} onHoldAgain={() => holdAgain.mutate(quantity)} />
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -360,13 +444,34 @@ function EnrollForm({ event, ticketType, availability }: { event: EventDetail; t
                   </AlertDescription>
                 </Alert>
               )}
-              <SubmitButton
-                pending={isSubmitting || redirecting}
-                icon={approval ? Send : paid ? CreditCard : TicketCheck}
-                className="w-full"
-              >
-                {approval ? "ส่งคำขอ" : paid ? "ไปชำระเงิน" : "ยืนยันการลงทะเบียน"}
-              </SubmitButton>
+              {hold && timeLeft !== undefined && (
+                <p
+                  className={cn(
+                    "flex items-center justify-center gap-1.5 text-sm",
+                    timeLeft <= 60_000 ? "text-destructive" : "text-muted-foreground",
+                  )}
+                >
+                  {expired ? <TimerOff className="size-4" /> : <Timer className="size-4" />}
+                  {expired ? (
+                    "หมดเวลาจองที่นั่งแล้ว"
+                  ) : (
+                    <>
+                      เหลือเวลากรอกข้อมูล <span className="font-semibold tabular-nums">{formatTimeLeft(timeLeft)}</span>
+                    </>
+                  )}
+                </p>
+              )}
+              {expired ? (
+                <HoldAgainButton pending={holdAgain.isPending} onClick={() => holdAgain.mutate(quantity)} className="w-full" />
+              ) : (
+                <SubmitButton
+                  pending={isSubmitting || redirecting}
+                  icon={approval ? Send : paid ? CreditCard : TicketCheck}
+                  className="w-full"
+                >
+                  {approval ? "ส่งคำขอ" : paid ? "ไปชำระเงิน" : "ยืนยันการลงทะเบียน"}
+                </SubmitButton>
+              )}
               {paid && !approval && (
                 <p className="text-center text-xs text-muted-foreground">ระบบจองที่นั่งไว้ 30 นาทีระหว่างชำระเงินผ่าน Stripe</p>
               )}
@@ -377,6 +482,51 @@ function EnrollForm({ event, ticketType, availability }: { event: EventDetail; t
 
       <LeaveGuard when={dirty} allowLeaveRef={done} description="ข้อมูลผู้เข้าร่วมที่กรอกไว้จะหายไป" />
     </div>
+  );
+}
+
+/**
+ * The seat hold's time left, next to the ticket count it holds. Once it runs out the seats are
+ * anyone's again; what was typed stays, and holding again carries on with it.
+ */
+function HoldStatus({ timeLeft, pending, onHoldAgain }: { timeLeft: number; pending: boolean; onHoldAgain: () => void }) {
+  const expired = timeLeft === 0;
+  const urgent = timeLeft <= 60_000;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col">
+        <span className={cn("flex items-center gap-2 font-medium", urgent && "text-destructive")}>
+          {expired ? <TimerOff className="size-4" /> : <Timer className={cn("size-4", !urgent && "text-muted-foreground")} />}
+          {expired ? "หมดเวลาจองที่นั่ง" : "จองที่นั่งไว้ให้คุณแล้ว"}
+        </span>
+        <span className="text-sm text-muted-foreground">
+          {expired
+            ? "ที่นั่งถูกปล่อยให้คนอื่นแล้ว ข้อมูลที่กรอกไว้ยังอยู่"
+            : "กรอกข้อมูลให้เสร็จก่อนหมดเวลา ไม่เช่นนั้นที่นั่งจะถูกปล่อยให้คนอื่น"}
+        </span>
+      </div>
+      {expired ? (
+        <HoldAgainButton pending={pending} onClick={onHoldAgain} size="sm" />
+      ) : (
+        // a timer, not a live region: announcing every second would drown out the form
+        <span
+          role="timer"
+          aria-label="เวลาจองที่นั่งที่เหลือ"
+          className={cn("text-2xl font-semibold tabular-nums", urgent && "text-destructive")}
+        >
+          {formatTimeLeft(timeLeft)}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function HoldAgainButton({ pending, ...props }: { pending: boolean } & React.ComponentProps<typeof Button>) {
+  return (
+    <Button type="button" {...props} disabled={pending || props.disabled}>
+      {pending ? <Spinner data-icon="inline-start" /> : <RotateCcw data-icon="inline-start" />}
+      จองที่นั่งใหม่
+    </Button>
   );
 }
 
