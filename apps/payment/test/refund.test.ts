@@ -320,9 +320,10 @@ describe("buyer refunds", () => {
     expect(await seatsTaken(db, type.ticketTypeId)).toBe(0);
 
     const toBuyer = enqueueMail.mock.calls.find(([m]) => m.to === emailOf("buyer"))![0];
-    expect(toBuyer.subject).toContain("วิธีรับเงินคืน");
-    expect(toBuyer.html).toContain(`เลขคำสั่งซื้อ: <strong>${id}</strong>`);
-    expect(toBuyer.html).toContain("refunds@eventide.example");
+    expect(toBuyer).toMatchObject({
+      template: "order-cancelled",
+      props: { byOrganizer: false, amount: 300, percent: 50, total: 600, manual: true, orderNumber: id },
+    });
   });
 });
 
@@ -339,7 +340,7 @@ describe("organizer refunds", () => {
     expect(await refundsOf(id)).toMatchObject([{ requestedBy: userIds.owner, note: "งานเลื่อนไม่มีกำหนด" }]);
     expect((await enrollmentOf(id)).status).toBe("cancelled");
     const toBuyer = enqueueMail.mock.calls.find(([m]) => m.to === emailOf("buyer"))![0];
-    expect(toBuyer.html).toContain("งานเลื่อนไม่มีกำหนด");
+    expect(toBuyer).toMatchObject({ template: "order-cancelled", props: { byOrganizer: true, note: "งานเลื่อนไม่มีกำหนด" } });
   });
 
   test("a suspended event is frozen for its organizer, not for admins", async () => {
@@ -354,7 +355,7 @@ describe("refund webhooks", () => {
     nextStatus = "pending";
     const { id, paymentId } = await order(await ticketType());
     expect((await json(await buyerRefund(id))).status).toBe("pending");
-    expect(enqueueMail.mock.calls.find(([m]) => m.to === emailOf("buyer"))![0].html).toContain("5–10 วันทำการ");
+    expect(enqueueMail.mock.calls.find(([m]) => m.to === emailOf("buyer"))![0]).toMatchObject({ props: { manual: false } });
     const stripeRefundId = (await refundsOf(id))[0]!.stripeRefundId!;
     const event = (status: string, extra: Record<string, unknown> = {}) => ({
       id: stripeRefundId,

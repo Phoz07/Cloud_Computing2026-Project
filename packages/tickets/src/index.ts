@@ -15,7 +15,7 @@ export {
   type Tx,
 } from "./enrollment";
 export { EnrollmentClosed, EnrollmentNotFound, SoldOut } from "./errors";
-export { accountLink, appUrl, formatMailTime, registeredEmails, sendTicketMails } from "./mail";
+export { accountLink, appUrl, registeredEmails, sendTicketMails } from "./mail";
 export { refundSatang, refundTerms } from "./refund";
 export { announceSeats, SEATS_CHANNEL } from "./seats";
 

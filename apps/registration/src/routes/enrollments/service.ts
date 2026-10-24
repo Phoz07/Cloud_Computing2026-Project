@@ -2,9 +2,9 @@ import {
   and, asc, count, db, desc, enrollments, eq, eventInvitations, events, ilike, or, seatHolds, sql, ticketTypeQuestions,
   tickets, ticketTypes, users, type TicketAnswer,
 } from "@app/db";
-import { enqueueMail } from "@app/mail";
+import { enqueueMail, type MailContent, type MailOrder } from "@app/mail";
 import {
-  accountLink, announceSeats, EnrollmentNotFound, formatMailTime, invitationTaken, markConfirmed, seatsTaken,
+  accountLink, announceSeats, EnrollmentNotFound, invitationTaken, markConfirmed, seatsTaken,
   sendTicketMails, SoldOut, ticketCode,
 } from "@app/tickets";
 import { enrollableEvent, manages, type Viewer } from "../../libs/access";
@@ -198,39 +198,45 @@ export async function listEventEnrollments(
   return { items: await loadEnrollments(rows.map((row) => row.id)), total, counts };
 }
 
-type MailOrder = { buyerEmail: string | null; buyerName: string | null; title: string; startsAt: Date; ticketType: string };
+type Buyer = { email: string | null; name: string | null };
 
-async function mailOrder(enrollmentId: string): Promise<MailOrder | undefined> {
+async function mailOrder(enrollmentId: string): Promise<{ buyer: Buyer; order: MailOrder } | undefined> {
   const [row] = await db
     .select({
       buyerEmail: users.email,
       buyerName: users.name,
       title: events.title,
+      venue: events.venue,
       startsAt: events.startsAt,
       ticketType: ticketTypes.name,
+      quantity: enrollments.quantity,
     })
     .from(enrollments)
     .innerJoin(events, eq(events.id, enrollments.eventId))
     .innerJoin(ticketTypes, eq(ticketTypes.id, enrollments.ticketTypeId))
     .leftJoin(users, eq(users.id, enrollments.buyerId))
     .where(eq(enrollments.id, enrollmentId));
-  return row;
+  if (!row) return undefined;
+  return {
+    buyer: { email: row.buyerEmail, name: row.buyerName },
+    order: {
+      event: { title: row.title, venue: row.venue, startsAt: row.startsAt.toISOString() },
+      ticketType: row.ticketType,
+      quantity: row.quantity,
+    },
+  };
 }
 
 /** Mails the buyer about the organizer's decision. Never throws: the decision is already saved. */
-async function mailDecision(enrollmentId: string, body: (order: MailOrder) => { subject: string; html: string }) {
+async function mailDecision(enrollmentId: string, compose: (buyer: Buyer, order: MailOrder) => MailContent) {
   try {
-    const order = await mailOrder(enrollmentId);
-    if (!order?.buyerEmail) return;
-    await enqueueMail({ to: order.buyerEmail, ...body(order) });
+    const found = await mailOrder(enrollmentId);
+    if (!found?.buyer.email) return;
+    await enqueueMail({ to: found.buyer.email, ...compose(found.buyer, found.order) });
   } catch (error) {
     console.error("Failed to enqueue enrollment mail", error);
   }
 }
-
-const greeting = (order: MailOrder) => `<p>สวัสดีคุณ ${Bun.escapeHTML(order.buyerName ?? "")}</p>`;
-const orderLine = (order: MailOrder) =>
-  `ตั๋ว <strong>${Bun.escapeHTML(order.ticketType)}</strong> ของอีเวนต์ <strong>${Bun.escapeHTML(order.title)}</strong> (${formatMailTime(order.startsAt)})`;
 
 /**
  * Approves a pending enrollment. A free one is confirmed and its tickets mailed; a paid one waits
@@ -255,13 +261,14 @@ export async function approveEnrollment(enrollmentId: string, reviewerId: string
 
   if (!result.paid) await sendTicketMails(enrollmentId);
   else {
-    await mailDecision(enrollmentId, (order) => ({
-      subject: `คำขอของคุณได้รับการอนุมัติ: ${order.title}`,
-      html:
-        greeting(order) +
-        `<p>ผู้จัดงานอนุมัติคำขอ${orderLine(order)}แล้ว</p>` +
-        `<p>กรุณาชำระเงินภายใน ${formatMailTime(result.expiresAt)} เพื่อรับตั๋ว</p>` +
-        `<p><a href="${accountLink(`/tickets/orders/${enrollmentId}`, true)}">ชำระเงิน</a></p>`,
+    await mailDecision(enrollmentId, (buyer, order) => ({
+      template: "enrollment-approved",
+      props: {
+        name: buyer.name,
+        order,
+        payBy: result.expiresAt.toISOString(),
+        url: accountLink(`/tickets/orders/${enrollmentId}`, true),
+      },
     }));
   }
   return getEnrollmentById(enrollmentId);
@@ -276,13 +283,10 @@ export async function rejectEnrollment(enrollmentId: string, reviewerId: string,
   if (!rejected) return new EnrollmentNotPending();
   announceSeats(rejected.eventId);
 
-  const reason = note?.trim();
-  await mailDecision(enrollmentId, (order) => ({
-    subject: `คำขอของคุณไม่ได้รับการอนุมัติ: ${order.title}`,
-    html:
-      greeting(order) +
-      `<p>ขออภัย ผู้จัดงานไม่ได้อนุมัติคำขอ${orderLine(order)}</p>` +
-      (reason ? `<p>เหตุผลจากผู้จัดงาน: ${Bun.escapeHTML(reason)}</p>` : ""),
+  const reason = note?.trim() || null;
+  await mailDecision(enrollmentId, (buyer, order) => ({
+    template: "enrollment-rejected",
+    props: { name: buyer.name, order, reason },
   }));
   return getEnrollmentById(enrollmentId);
 }

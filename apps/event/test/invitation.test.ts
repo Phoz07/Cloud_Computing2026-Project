@@ -219,11 +219,14 @@ describe("mail", () => {
     expect(mailedTo()).toEqual([emailOf("guest"), `fresh-${runId}@example.com`].sort());
 
     const byTo = Object.fromEntries(enqueueMail.mock.calls.map(([message]) => [message.to, message]));
-    expect(byTo[emailOf("guest")]!.subject).toContain("Private party");
-    expect(byTo[emailOf("guest")]!.html).toContain("คุณ guest");
-    expect(byTo[emailOf("guest")]!.html).toContain(`/events/${event.slug}"`);
+    expect(byTo[emailOf("guest")]).toMatchObject({
+      template: "event-invitation",
+      props: { name: "guest", event: { title: "Private party" }, url: expect.stringMatching(new RegExp(`/events/${event.slug}$`)) },
+    });
     // no account yet: the link signs them up first, then lands on the event
-    expect(byTo[`fresh-${runId}@example.com`]!.html).toContain(`/register?redirect=${encodeURIComponent(`/events/${event.slug}`)}`);
+    expect(byTo[`fresh-${runId}@example.com`]).toMatchObject({
+      props: { name: null, url: expect.stringContaining(`/register?redirect=${encodeURIComponent(`/events/${event.slug}`)}`) },
+    });
 
     // inviting again (skipped) mails no one
     await invite(event.id, [emailOf("guest")]);

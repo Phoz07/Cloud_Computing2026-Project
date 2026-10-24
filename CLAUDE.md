@@ -26,9 +26,15 @@ Eventide: an event ticketing website built as a Bun-workspace monorepo of micros
   - On each request the guard forwards the cookie to `AUTH_SERVICE_URL/api/auth/get-session` and caches the answer in Redis for 60s.
   - `databaseHooks` in `apps/auth/src/libs/auth.ts` write a revoked marker on ban, role change and sign-out, so those apply on the next request. Anything else that changes a role or deletes sessions outside Better Auth must call `markUserRevoked()`.
   - Design, diagrams and failure modes: `docs/auth.md`.
-- **Email:** nothing sends mail inline. Producers call `enqueueMail()` from `@app/mail`, which puts a message on the SQS `mail-queue`. `apps/mail-worker` consumes the queue and sends with **Nodemailer over Gmail SMTP**.
-  - A message is deleted only after it sends. Failures are retried and land in `mail-dlq` after 5 receives.
-  - Without `GMAIL_USER` / `GMAIL_APP_PASSWORD`, the worker runs dry and logs the rendered mail instead of sending it.
+- **Email:** nothing sends mail inline. Producers call `enqueueMail({ to, template, props })` from `@app/mail`, which puts a message on the SQS `mail-queue`. `apps/mail-worker` consumes the queue, renders the template and sends with **Nodemailer over Gmail SMTP**.
+  - Producers send data, never HTML. Each template's props are typed in `packages/mail/src/templates.ts`: raw strings (React escapes them), dates as ISO strings and amounts in baht. The subject, the wording and all formatting live in the template.
+  - Templates are **React Email** (`react-email`) in `apps/mail-worker/emails/<template>.tsx`. Each one default-exports the component with `PreviewProps` and exports `subject(props)`. They share `MailLayout` and the blocks in `emails/_components/` (`EventDetails`, `CtaButton`, `Note`, `RefundOutcome`, …).
+  - The Tailwind theme (`_components/theme.ts`) copies the web's tokens under the same names, in hex because mail clients don't read oklch. Use px values, not rem.
+  - `src/render.tsx` registers every template, renders HTML plus a plain-text part and attaches the logo inline (`cid:logo@eventide`, from `emails/static/logo.png`).
+  - Adding a mail means adding its props to `MailTemplates`, adding `emails/<name>.tsx` and adding a registry entry; a missing entry is a type error.
+  - Preview: `bun run --filter @app/mail-worker preview` (http://localhost:3010).
+  - A message is deleted only after it sends. Failures are retried and land in `mail-dlq` after 5 receives. That includes a template that throws on its props, so a fixed template can redrive them. A message with an unknown template is logged and left to reach the DLQ the same way.
+  - Without `GMAIL_USER` / `GMAIL_APP_PASSWORD`, the worker runs dry and logs each mail's recipient, subject and plain text instead of sending it.
 
 ## Commands
 
@@ -47,11 +53,12 @@ bun run db:studio             # Drizzle Studio
 bun run --filter @app/web lint    # oxlint (web only, no lint config elsewhere)
 bun run --filter @app/web build   # tsc -b && vite build
 bun run --filter @app/web start   # production server for the built web (dist/ + per-URL Open Graph tags)
+bun run --filter @app/mail-worker preview   # React Email preview of every mail template on :3010
 ```
 
 **Type checking:** run `bun check` from **inside** a workspace (`cd apps/web && bun check`; `cd apps/event && bun check src/index.ts`). The root `bun run typecheck` reads the root tsconfig, which has no DOM lib and no `@/*` alias, so it reports false errors in `apps/web`.
 
-**Tests:** use `bun test` (`import { test, expect } from "bun:test"`). Suites that need env or infra get a `test` script that passes `--env-file=../../.env`; run them with `bun run test` inside `packages/auth-guard`, `packages/storage`, `apps/auth`, `apps/event`, `apps/registration` or `apps/payment` (they need `infra:up`). The `test` scripts of `apps/event`, `apps/registration` and `apps/payment` run each file in its own process, because the auth mock (`mock.module`) leaks between files. For a single file use `bun test test/event.test.ts`, and for a single test use `bun test -t "pattern"`.
+**Tests:** use `bun test` (`import { test, expect } from "bun:test"`). Suites that need env or infra get a `test` script that passes `--env-file=../../.env`; run them with `bun run test` inside `packages/auth-guard`, `packages/storage`, `apps/auth`, `apps/event`, `apps/registration` or `apps/payment` (they need `infra:up`). `apps/mail-worker` also has a `test` script, which renders every template and needs no infra. The `test` scripts of `apps/event`, `apps/registration` and `apps/payment` run each file in its own process, because the auth mock (`mock.module`) leaks between files. For a single file use `bun test test/event.test.ts`, and for a single test use `bun test -t "pattern"`.
 
 **shadcn CLI:** `components.json` lives in `apps/web`, so run `cd apps/web && bunx shadcn@latest add <component>`. The shadcn MCP server is configured in `.mcp.json`.
 
@@ -82,10 +89,10 @@ bun run --filter @app/web start   # production server for the built web (dist/ +
   | `apps/registration` | 3003 | `/api/regis` | seat availability (plus a live WebSocket feed), enrollments (enroll, approve / reject), tickets ("my tickets"), check-in |
   | `apps/payment` | 3004 | `/api/payment` | Stripe Checkout for enrollments, the Stripe webhook, refunds (`payments`, `refunds`) |
 
-- `apps/mail-worker`: an SQS consumer with no HTTP server. It sends queued mail through Gmail.
+- `apps/mail-worker`: an SQS consumer with no HTTP server. It renders queued mail with the React Email templates in `emails/` and sends it through Gmail. It is the only workspace that depends on React besides the web.
 - `packages/db` (`@app/db`): the Drizzle schema and client that every service shares.
 - `packages/auth-guard` (`@app/auth-guard`): roles and permissions (`./permissions`, browser-safe, also used by the web), the session introspection + Redis cache, and the `authGuard` Elysia plugin.
-- `packages/mail` (`@app/mail`): the mail queue contract. It holds the `MailMessage` type, the shared `sqs` client, `enqueueMail()` for producers and `parseMailMessage()` for the worker.
+- `packages/mail` (`@app/mail`): the mail queue contract. It holds the `MailMessage` / `MailContent` types (a template name plus its props, from `src/templates.ts`), the shared `sqs` client, `enqueueMail()` for producers and `parseMailMessage()` for the worker.
 - `packages/storage` (`@app/storage`): file storage that each service imports (a library, not a service), built on [files-sdk](https://files-sdk.dev) over Bun's S3 client. See **Files** below.
 - `packages/tickets` (`@app/tickets`): ticket issuing shared by registration and payment (a library): which enrollments hold seats, confirming one, mailing its tickets, announcing seat changes. See **Tickets** below.
 - `services/*` is declared as a workspace glob but is unused. Root `bun run dev` only starts `apps/*`.
@@ -183,7 +190,7 @@ test/<feature>.test.ts
 - **Refunds** (`apps/payment`, table `refunds`) are whole-order and cancel the enrollment (`cancelled`, `markCancelled()`), which frees its seats and invitation.
   - The buyer (`POST /refunds`) gets the policy's percent until `starts_at − cutoff`. The policy is the one snapshotted onto `enrollments.refund_percent` / `refund_cutoff_hours` at enroll time, and `refundTerms()` in `@app/tickets` is the one place that reads it.
   - The organizer or an admin (`POST /enrollments/:id/refund`) refunds 100% at any time.
-  - `issueRefund()` (`src/libs/refund.ts`) refunds through Stripe only a card payment (`charges.list` tells). Anything else (PromptPay) would need Stripe to email the buyer for a bank account, so it is refunded **by hand**: recorded as `requires_action` with a null `stripe_refund_id`, and the buyer's mail (`libs/mail.ts`) asks them to send their order number (the enrollment id) and bank account to the contact channels (`refundContacts`, mock values). Marking such a refund done isn't built yet.
+  - `issueRefund()` (`src/libs/refund.ts`) refunds through Stripe only a card payment (`charges.list` tells). Anything else (PromptPay) would need Stripe to email the buyer for a bank account, so it is refunded **by hand**: recorded as `requires_action` with a null `stripe_refund_id`, and the buyer's mail (`libs/mail.ts` sends `manual: true`) asks them to send their order number (the enrollment id) and bank account to the contact channels (`refundContacts` in `apps/mail-worker/emails/_components/refund-claim.tsx`, mock values). Marking such a refund done isn't built yet.
   - For a card, it first looks for a refund Stripe already made for the payment but we never recorded (`refunds.list`, matched on `metadata.paymentId`) and records that one, so a payment is refunded at most once. There is no fixed idempotency key, because Stripe replays a refused request under the same key for 24 hours, even after its cause is fixed. A card refund can fail later, so `refund.updated` / `refund.failed` keep `refunds.status` current.
 - Enrollments keep their event, ticket type and invitation with `ON DELETE RESTRICT`, so those services answer `EVENT_HAS_ENROLLMENTS`, `TICKET_TYPE_IN_USE` and `INVITATION_USED` instead.
 - Design, lifecycle diagrams and failure modes: `docs/tickets.md`.

@@ -352,8 +352,11 @@ describe("webhook", () => {
     const [refund] = await db.select().from(refunds).where(eq(refunds.paymentId, payment.id));
     expect(refund).toMatchObject({ amount: "600.00", initiatedBy: "system", status: "requires_action", stripeRefundId: null });
     const [mail] = enqueueMail.mock.calls.map(([m]) => m);
-    expect(mail).toMatchObject({ to: emailOf("buyer"), subject: expect.stringContaining("วิธีรับเงินคืน") });
-    expect(mail!.html).toContain(`เลขคำสั่งซื้อ: <strong>${late}</strong>`);
+    expect(mail).toMatchObject({
+      to: emailOf("buyer"),
+      template: "refund-system",
+      props: { reason: "unavailable", amount: 600, manual: true, orderNumber: late },
+    });
   });
 
   test("a payment for an order cancelled meanwhile is refunded, and the order stays cancelled", async () => {
