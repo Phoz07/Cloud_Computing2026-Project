@@ -20,7 +20,8 @@ export default defineConfig({
      proxy: {
        "/api/auth": "http://localhost:3001",
        "/api/events": "http://localhost:3002",
-       "/api/regis": "http://localhost:3003",
+       // ws: the event page's live seats (/api/regis/events/:eventId/availability/live)
+       "/api/regis": { target: "http://localhost:3003", ws: true },
        "/api/payment": "http://localhost:3004",
        // stored files: /files/<key> -> the event-assets bucket (only public/* is readable)
        "/files": {

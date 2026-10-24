@@ -1,5 +1,5 @@
 import { and, asc, count, db, eq, events, inArray, notInArray, ticketTypeQuestions, ticketTypes } from "@app/db";
-import { seatsTaken, type Tx } from "@app/tickets";
+import { announceSeats, seatsTaken, type Tx } from "@app/tickets";
 import { HTTPError } from "elysia";
 import { isForeignKeyViolation } from "../../libs/errors";
 import * as TicketTypeModel from "./model";
@@ -170,6 +170,8 @@ export async function createTicketType(eventId: string, input: TicketTypeModel.B
     return row!;
   });
   if (created instanceof Error) return created;
+  // the event page's live seat feed lists every type of the event
+  announceSeats(eventId);
   return getTicketType(created.id);
 }
 
@@ -218,6 +220,7 @@ export async function updateTicketType(
     return null;
   });
   if (result) return result;
+  announceSeats(eventId);
   return getTicketType(ticketTypeId);
 }
 
@@ -228,7 +231,9 @@ export async function deleteTicketType(eventId: string, ticketTypeId: string) {
       .delete(ticketTypes)
       .where(and(eq(ticketTypes.id, ticketTypeId), eq(ticketTypes.eventId, eventId)))
       .returning({ id: ticketTypes.id });
-    return deleted ?? new TicketTypeNotFound();
+    if (!deleted) return new TicketTypeNotFound();
+    announceSeats(eventId);
+    return deleted;
   } catch (error) {
     if (isForeignKeyViolation(error)) return new TicketTypeInUse();
     throw error;

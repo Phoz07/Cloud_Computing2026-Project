@@ -5,6 +5,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { availabilityQueryOptions } from "@/lib/enrollments";
+import { useLiveSeats } from "@/lib/live-seats";
 import { ticketTypesQueryOptions } from "@/lib/ticket-types";
 import { useEventDetail } from "../-components/use-event-detail";
 import { TicketTypeEditor } from "./-components/ticket-type-editor";
@@ -18,6 +19,7 @@ function EditTicketTypePage() {
   const { ticketTypeId } = Route.useParams();
   const { data: types, isPending } = useQuery(ticketTypesQueryOptions(event.id));
   const { data: availability, isPending: availabilityPending } = useQuery(availabilityQueryOptions(event.id));
+  useLiveSeats(event.id);
 
   // waits for the seats too: they decide whether the kind is locked
   if (isPending || availabilityPending) {

@@ -58,6 +58,29 @@ export const enrollments = pgTable(
   ],
 );
 
+// Seats of a first_come ticket type an account holds while it fills in the enroll form, until
+// expires_at. One row per account and ticket type: a lapsed row is reused by the next hold, and
+// enrolling deletes it. Owned by apps/registration (see docs/tickets.md).
+export const seatHolds = pgTable(
+  "seat_holds",
+  {
+    id: id(),
+    // cascade: a hold is never worth keeping a ticket type, event or account around for
+    eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+    ticketTypeId: uuid("ticket_type_id").notNull().references(() => ticketTypes.id, { onDelete: "cascade" }),
+    holderId: uuid("holder_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    quantity: integer("quantity").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("seat_holds_ticket_type_id_holder_id_idx").on(table.ticketTypeId, table.holderId),
+    index("seat_holds_event_id_expires_at_idx").on(table.eventId, table.expiresAt),
+    index("seat_holds_holder_id_idx").on(table.holderId),
+    check("seat_holds_quantity_check", sql`${table.quantity} >= 1`),
+  ],
+);
+
 /** One answer to a ticket type's question, copied with its label when the ticket was made. */
 export type TicketAnswer = { questionId: string; label: string; value: string };
 

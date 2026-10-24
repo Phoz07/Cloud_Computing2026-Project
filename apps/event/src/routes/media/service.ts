@@ -2,6 +2,7 @@ import { and, asc, count, db, eq, eventAssets, events } from "@app/db";
 import { deleteFile, fileUrl, storeFile } from "@app/storage";
 import { HTTPError } from "elysia";
 import { EventNotFound } from "../../libs/errors";
+import { refreshEvent } from "../events/service";
 import type * as MediaModel from "./model";
 
 export const MAX_ASSETS_PER_EVENT = 20;
@@ -40,6 +41,8 @@ async function replaceCover(eventId: string, key: string | null) {
     await tx.update(events).set({ coverImageKey: key }).where(eq(events.id, eventId));
     return row?.key;
   });
+  // the cached event carries the cover's URL
+  await refreshEvent(eventId);
   await deleteFile(previous);
 }
 

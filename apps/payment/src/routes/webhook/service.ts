@@ -1,5 +1,5 @@
 import { and, db, enrollments, eq, ne, notInArray, payments, refunds, ticketTypes } from "@app/db";
-import { confirmEnrollment, sendTicketMails } from "@app/tickets";
+import { announceSeats, confirmEnrollment, sendTicketMails } from "@app/tickets";
 import type Stripe from "stripe";
 import { mailLateRefund, mailRefundFailed } from "../../libs/mail";
 import { issueRefund, toRefundStatus } from "../../libs/refund";
@@ -121,8 +121,11 @@ async function settleUnpaid(session: Session) {
     .innerJoin(ticketTypes, eq(ticketTypes.id, enrollments.ticketTypeId))
     .where(eq(enrollments.id, payment.enrollmentId));
   if (row?.kind === "approval") return;
-  await db
+  const [expired] = await db
     .update(enrollments)
     .set({ status: "expired" })
-    .where(and(eq(enrollments.id, payment.enrollmentId), eq(enrollments.status, "awaiting_payment")));
+    .where(and(eq(enrollments.id, payment.enrollmentId), eq(enrollments.status, "awaiting_payment")))
+    .returning({ eventId: enrollments.eventId });
+  // the session can end before the hold does, freeing the seats early
+  if (expired) announceSeats(expired.eventId);
 }

@@ -1,6 +1,6 @@
 import { roles, type Permissions, type Role } from "@app/auth-guard";
-import { and, db, eq, eventInvitations, events } from "@app/db";
-import { EventNotFound, InviteOnly } from "./errors";
+import { and, db, eq, eventInvitations, events, ticketTypes } from "@app/db";
+import { EnrollmentNotOpen, EventNotFound, InviteOnly, TicketTypeNotFound } from "./errors";
 
 export type Viewer = { id: string; email: string; role: Role };
 
@@ -37,4 +37,22 @@ export function eventAccess(event: EventRow, viewer: Viewer | null, invited: boo
     return event.status === "invite" ? new InviteOnly() : new EventNotFound();
   }
   return reachable && event.endsAt > now ? ("open" as const) : ("preview" as const);
+}
+
+/**
+ * The event of a ticket type and `viewer`'s invitation to it, if `viewer` may enroll in it now;
+ * otherwise the error to answer. Enrolling and holding seats both start here.
+ */
+export async function enrollableEvent(ticketTypeId: string, viewer: Viewer) {
+  const [found] = await db
+    .select({ event: events })
+    .from(ticketTypes)
+    .innerJoin(events, eq(events.id, ticketTypes.eventId))
+    .where(eq(ticketTypes.id, ticketTypeId));
+  if (!found) return new TicketTypeNotFound();
+  const invitation = await findInvitation(found.event.id, viewer.email);
+  const access = eventAccess(found.event, viewer, !!invitation);
+  if (access instanceof Error) return access;
+  if (access !== "open") return new EnrollmentNotOpen();
+  return { event: found.event, invitation };
 }

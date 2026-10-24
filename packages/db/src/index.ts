@@ -8,7 +8,7 @@ export type DB = typeof db;
 export * from "./schema";
 
 export {
-  eq, ne, and, or, not, inArray, notInArray, isNull, isNotNull, desc, asc, sql, count, ilike, lt, lte, gt, gte,
+  eq, ne, and, or, not, inArray, notInArray, isNull, isNotNull, desc, asc, sql, count, min, ilike, lt, lte, gt, gte,
   type SQL,
 } from "drizzle-orm";
 // a table under another name, to join it twice (e.g. users as buyer and as requester)

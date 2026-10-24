@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { availabilityQueryOptions, type Availability } from "@/lib/enrollments";
 import { hasEnded, type EventDetail } from "@/lib/events";
 import { formatPrice } from "@/lib/format";
+import { useLiveSeats } from "@/lib/live-seats";
 import { useSession } from "@/lib/session";
 import { kindInfo, ticketTypesQueryOptions, type TicketType } from "@/lib/ticket-types";
 
@@ -15,6 +16,7 @@ import { kindInfo, ticketTypesQueryOptions, type TicketType } from "@/lib/ticket
 export function EventTickets({ event }: { event: EventDetail }) {
   const { data: types, isPending } = useQuery(ticketTypesQueryOptions(event.id));
   const { data: availability } = useQuery(availabilityQueryOptions(event.id));
+  useLiveSeats(event.id);
 
   return (
     <section className="flex flex-col gap-3" aria-labelledby="tickets">
@@ -61,6 +63,8 @@ function TicketOption({
 }) {
   const { icon: KindIcon, label } = kindInfo[ticketType.kind];
   const remaining = availability?.remaining;
+  // not counted in `remaining`; they come back if the payment doesn't arrive in time
+  const reserved = availability?.reserved ?? 0;
 
   return (
     <li className="flex flex-col gap-4 rounded-3xl border bg-card p-4 sm:flex-row sm:items-center">
@@ -79,7 +83,13 @@ function TicketOption({
           <p className="text-sm whitespace-pre-line text-muted-foreground">{ticketType.description}</p>
         )}
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          {remaining != null && remaining > 0 && <span>เหลือ {remaining.toLocaleString()} ใบ</span>}
+          {remaining != null && (remaining > 0 || reserved > 0) && (
+            <span>
+              {remaining > 0
+                ? `เหลือ ${remaining.toLocaleString()} ใบ${reserved > 0 ? ` (อีก ${reserved.toLocaleString()} ใบรอชำระเงิน)` : ""}`
+                : `${reserved.toLocaleString()} ใบรอชำระเงิน อาจว่างอีกครั้งหากชำระไม่ทัน`}
+            </span>
+          )}
           <span>สูงสุด {ticketType.maxPerUser} ใบต่อบัญชี</span>
           {!!availability?.mine && (
             <Link to="/tickets" className="flex items-center gap-1 text-primary underline-offset-4 hover:underline">
@@ -144,7 +154,14 @@ function TicketAction({
           params={{ slug: event.slug, ticketTypeId: ticketType.id }}
           className={buttonVariants({ className: "sm:w-48" })}
         >
-          {ticketType.kind === "approval" ? "ขอเข้าร่วม" : ticketType.price > 0 ? "ซื้อตั๋ว" : "ลงทะเบียน"}
+          {/* seats held on another visit or device: the enroll page carries on with them */}
+          {availability.hold
+            ? "กรอกข้อมูลต่อ"
+            : ticketType.kind === "approval"
+              ? "ขอเข้าร่วม"
+              : ticketType.price > 0
+                ? "ซื้อตั๋ว"
+                : "ลงทะเบียน"}
           <ArrowRight data-icon="inline-end" />
         </Link>
       );

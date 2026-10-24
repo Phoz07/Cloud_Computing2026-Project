@@ -1,6 +1,7 @@
 import { asc, db, eq, eventCategories } from "@app/db";
 import { HTTPError } from "elysia";
 import { CategoryNotFound, isForeignKeyViolation, isUniqueViolation } from "../../libs/errors";
+import { forgetCategoryEvents } from "../../libs/event-cache";
 import type * as CategoryModel from "./model";
 
 export class CategoryTaken extends HTTPError.id("CATEGORY_TAKEN", 409) {
@@ -46,7 +47,9 @@ export async function updateCategory(id: string, input: CategoryModel.ByIdPatch[
       .set({ name: input.name?.trim(), slug: input.slug })
       .where(eq(eventCategories.id, id))
       .returning();
-    return row ? toCategory(row) : new CategoryNotFound();
+    if (!row) return new CategoryNotFound();
+    await forgetCategoryEvents(id);
+    return toCategory(row);
   } catch (error) {
     if (isUniqueViolation(error)) return new CategoryTaken();
     throw error;

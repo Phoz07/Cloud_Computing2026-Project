@@ -1,5 +1,6 @@
-import { and, db, enrollments, eq, eventInvitations, gt, inArray, ne, or, sql, ticketTypes } from "@app/db";
+import { and, db, enrollments, eq, eventInvitations, gt, inArray, ne, or, seatHolds, sql, ticketTypes } from "@app/db";
 import { EnrollmentClosed, EnrollmentNotFound, SoldOut } from "./errors";
+import { announceSeats } from "./seats";
 
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type Executor = typeof db | Tx;
@@ -23,22 +24,41 @@ export const effectiveStatus = (enrollment: Pick<EnrollmentRow, "status" | "expi
     ? "expired"
     : enrollment.status;
 
+/** A seat hold that hasn't run out. Like a payment hold, a lapsed one stops counting right away, without a job. */
+export const activeHold = () => gt(seatHolds.expiresAt, sql`now()`);
+
 /**
- * Tickets the active enrollments of a ticket type hold. Writers that check it against the quota
- * lock the ticket type row first (`SELECT … FOR UPDATE`), so two enrollments can't both take the last seat.
+ * Tickets the active enrollments of a ticket type hold, plus the seats accounts hold while they
+ * fill in the enroll form. `except` leaves out an enrollment that is checked again, or the hold of
+ * the account that enrolls with it. Writers that check it against the quota lock the ticket type
+ * row first (`SELECT … FOR UPDATE`), so two enrollments can't both take the last seat.
  */
-export async function seatsTaken(executor: Executor, ticketTypeId: string, exceptEnrollmentId?: string) {
-  const [row] = await executor
+export async function seatsTaken(
+  executor: Executor,
+  ticketTypeId: string,
+  except: { enrollmentId?: string; holderId?: string } = {},
+) {
+  const [enrolled] = await executor
     .select({ total: sql<number>`coalesce(sum(${enrollments.quantity}), 0)`.mapWith(Number) })
     .from(enrollments)
     .where(
       and(
         eq(enrollments.ticketTypeId, ticketTypeId),
         activeEnrollment(),
-        exceptEnrollmentId ? ne(enrollments.id, exceptEnrollmentId) : undefined,
+        except.enrollmentId ? ne(enrollments.id, except.enrollmentId) : undefined,
       ),
     );
-  return row?.total ?? 0;
+  const [held] = await executor
+    .select({ total: sql<number>`coalesce(sum(${seatHolds.quantity}), 0)`.mapWith(Number) })
+    .from(seatHolds)
+    .where(
+      and(
+        eq(seatHolds.ticketTypeId, ticketTypeId),
+        activeHold(),
+        except.holderId ? ne(seatHolds.holderId, except.holderId) : undefined,
+      ),
+    );
+  return (enrolled?.total ?? 0) + (held?.total ?? 0);
 }
 
 /** Whether another active enrollment already uses the invitation (it allows one). */
@@ -87,13 +107,14 @@ export async function markCancelled(tx: Tx, enrollment: Pick<EnrollmentRow, "id"
  * Confirms a pending (approved) or paid enrollment. A first_come or invite enrollment whose hold
  * ran out no longer owns its seats or invitation, so it's confirmed only if they're still free;
  * otherwise `SoldOut` (the payment service then refunds). Approval tickets have no seats to protect.
- * `alreadyConfirmed` makes a repeated call (e.g. a webhook delivered twice) a no-op.
+ * `alreadyConfirmed` makes a repeated call (e.g. a webhook delivered twice) a no-op. A new
+ * confirmation is announced to the live seat feed.
  */
 export async function confirmEnrollment(enrollmentId: string) {
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const [enrollment] = await tx.select().from(enrollments).where(eq(enrollments.id, enrollmentId)).for("update");
     if (!enrollment) return new EnrollmentNotFound();
-    if (enrollment.status === "confirmed") return { alreadyConfirmed: true };
+    if (enrollment.status === "confirmed") return { alreadyConfirmed: true as const };
     // a cancelled order stays cancelled; a payment that still lands for it is refunded
     if (enrollment.status === "rejected" || enrollment.status === "cancelled") return new EnrollmentClosed();
 
@@ -106,7 +127,7 @@ export async function confirmEnrollment(enrollmentId: string) {
     const lapsed = effectiveStatus(enrollment) === "expired";
     if (lapsed && ticketType?.kind !== "approval") {
       if (ticketType?.quota != null) {
-        const taken = await seatsTaken(tx, enrollment.ticketTypeId, enrollment.id);
+        const taken = await seatsTaken(tx, enrollment.ticketTypeId, { enrollmentId: enrollment.id });
         if (taken + enrollment.quantity > ticketType.quota) return new SoldOut();
       }
       if (enrollment.invitationId && (await invitationTaken(tx, enrollment.invitationId, enrollment.id))) {
@@ -114,6 +135,8 @@ export async function confirmEnrollment(enrollmentId: string) {
       }
     }
     await markConfirmed(tx, enrollment);
-    return { alreadyConfirmed: false };
+    return { alreadyConfirmed: false as const, eventId: enrollment.eventId };
   });
+  if (!(result instanceof Error) && !result.alreadyConfirmed) announceSeats(result.eventId);
+  return result;
 }
