@@ -1,0 +1,16 @@
+# Copy to `stripe.auto.tfvars` (gitignored, auto-loaded). Setup walkthrough:
+# docs/stripe.md (sandbox → restricted key → webhook endpoint).
+#
+#   cp stripe.auto.tfvars.example stripe.auto.tfvars
+#   # fill in the two values
+#   terraform -chdir=infra/terraform/10-foundation apply
+#
+# Webhook endpoint to register in the Stripe dashboard (HTTPS, needs the domain):
+#   https://events.<domain>/api/payment/webhook
+# with the six events `bun run stripe:listen` lists (root package.json).
+#
+# Only 10-foundation reads this. scripts/deploy.sh picks the secret up on the
+# next `make deploy` and injects it into eventide-payment. Empty = payment off.
+
+stripe_secret_key     = ""
+stripe_webhook_secret = ""

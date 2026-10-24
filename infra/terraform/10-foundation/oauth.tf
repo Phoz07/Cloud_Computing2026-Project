@@ -25,7 +25,8 @@ variable "google_client_secret" {
 }
 
 locals {
-  google_oauth_enabled = var.google_client_id != "" && var.google_client_secret != ""
+  # nonsensitive(): "is it configured" is not a secret, and count/output need a plain bool.
+  google_oauth_enabled = nonsensitive(var.google_client_id != "" && var.google_client_secret != "")
 }
 
 resource "aws_secretsmanager_secret" "google_oauth" {

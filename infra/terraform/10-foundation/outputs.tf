@@ -20,7 +20,7 @@ output "ecr_repository_urls" {
 }
 
 output "uploads_bucket" {
-  description = "S3 bucket for event cover images (presigned PUT/GET)."
+  description = "S3 bucket for uploaded files (avatars, event covers/assets); public/* is readable, served as /files/* by the ingress."
   value       = data.aws_s3_bucket.uploads.id
 }
 
@@ -28,10 +28,11 @@ output "uploads_bucket_arn" {
   value = data.aws_s3_bucket.uploads.arn
 }
 
-output "secret_arns" {
-  description = "Secrets Manager ARN per service — referenced by ESO ExternalSecret resources."
-  value       = { for k, s in aws_secretsmanager_secret.service : k => s.arn }
+output "mail_queue_url" {
+  description = "SQS queue URL for @app/mail — deploy.sh puts it in the eventide-common k8s Secret as MAIL_QUEUE_URL."
+  value       = aws_sqs_queue.mail.url
 }
+
 
 # --- Custom domain (dns.tf) — consumed by 20-platform via terraform_remote_state.
 # All empty / [] when dns_domain is unset.
@@ -63,6 +64,15 @@ output "acm_certificate_arn" {
 
 output "google_oauth_secret" {
   description = "Secrets Manager name holding the Google OAuth client id/secret, or \"\" when Google sign-in is disabled. scripts/deploy.sh reads it into eventide-auth."
-  # nonsensitive(): the *name* is fixed and public; only the secret value is sensitive.
-  value = nonsensitive(local.google_oauth_enabled) ? "${var.project}/google-oauth" : ""
+  value       = local.google_oauth_enabled ? "${var.project}/google-oauth" : ""
+}
+
+output "stripe_secret" {
+  description = "Secrets Manager name holding STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET, or \"\" when payment is disabled. deploy.sh reads it into eventide-payment."
+  value       = local.stripe_enabled ? "${var.project}/stripe" : ""
+}
+
+output "gmail_secret" {
+  description = "Secrets Manager name holding GMAIL_USER / GMAIL_APP_PASSWORD / MAIL_FROM, or \"\" when mail runs dry. deploy.sh reads it into eventide-mail-worker."
+  value       = local.gmail_enabled ? "${var.project}/gmail" : ""
 }

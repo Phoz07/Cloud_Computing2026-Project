@@ -1,14 +1,16 @@
 # 10-foundation — durable AWS resources
 
 **Lifetime: permanent.** Never in the nightly `terraform destroy`. Costs ~$1/month
-(S3 storage + Secrets Manager: $0.40/secret/month × 3). Holds the things that must
-survive a platform teardown — pushed images, uploaded cover images, secret values.
+(ECR + S3 storage, SQS is free at this volume, Secrets Manager $0.40/secret/month
+for whichever of google/stripe/gmail are enabled). Holds the things that must
+survive a platform teardown — pushed images, uploaded files, third-party secrets.
 
 | Resource | Why it lives here |
 |---|---|
-| 3 × ECR repo (`eventide/{auth,event,registration}`) | Images built by CI must outlast the cluster. |
-| S3 uploads bucket (`eventide-uploads-<account>`) | Cover images are re-seeded each rebuild, but the bucket + CORS policy shouldn't churn. |
-| 3 × Secrets Manager secret (`eventide/{auth,event,registration}`) | Real secret values are entered once and must not be lost on teardown. |
+| 7 × ECR repo (`eventide/{auth,event,registration,payment,mail-worker,web,db-bootstrap}`) | Images built per session must outlast the cluster. |
+| S3 uploads bucket (`eventide-uploads-<account>`) + `public/*` read policy | Uploaded avatars / event images; `/files/*` is served from here by the ingress (`s3.tf`). |
+| SQS `eventide-mail-queue` + `eventide-mail-dlq` (`sqs.tf`) | The mail queue `@app/mail` writes to and `apps/mail-worker` drains; stable URL across rebuilds. |
+| `eventide/stripe`, `eventide/gmail` secrets (`secrets.tf`, opt-in) | Stripe + Gmail credentials, Terraform-managed from `stripe.auto.tfvars` / `gmail.auto.tfvars`. Absent = payment off / mail dry-run. |
 | Route 53 hosted zone + ACM wildcard cert (`dns.tf`, opt-in) | The zone's NS records are delegated from Cloudflare **by hand, once** — recreating the zone changes the NS set and breaks the delegation. The cert DNS-validates once and is reused across every platform rebuild. |
 | `eventide/google-oauth` secret (`oauth.tf`, opt-in) | Google OAuth client id/secret — stable across rebuilds, Terraform-managed from `google.auto.tfvars`. `scripts/deploy.sh` merges it into `eventide-auth`. |
 
@@ -34,20 +36,28 @@ aws ecr describe-repositories --query 'repositories[].repositoryName'
 aws secretsmanager list-secrets --query 'SecretList[].Name'
 ```
 
-Both must list the three `eventide/*` resources.
+ECR must list the seven `eventide/*` repos; `aws sqs list-queues` the two queues.
 
-## Filling in real secret values
+**v2 merge (2026-10-24) — expected diff on the next apply** against the state applied
+2026-09-07: +1 ECR repo (`mail-worker`), +2 SQS queues, +1 bucket policy, the Public
+Access Block loosened for policies, −1 CORS configuration, −4 placeholder
+`eventide/{auth,event,registration,payment}` secrets (they held `REPLACE_ME` only).
+`bash scripts/check-lab.sh` first: it probes `sqs:ListQueues` and the account-level
+Public Access Block, the two things this layer now assumes.
 
-Terraform seeds each secret with placeholder keys (`REPLACE_ME`) and then
-**ignores all further changes** to `secret_string`. Write real values with:
+## Stripe and Gmail (`secrets.tf`) — optional, opt-in
+
+Same shape as Google OAuth below: a gitignored `*.auto.tfvars` is the source of truth,
+Terraform owns the secret value, `scripts/deploy.sh` injects it on the next `make deploy`.
 
 ```bash
-aws secretsmanager put-secret-value --secret-id eventide/auth \
-  --secret-string "$(cat auth.env.json)"
+cp stripe.auto.tfvars.example stripe.auto.tfvars   # rk_test_… + whsec_…  (docs/stripe.md)
+cp gmail.auto.tfvars.example gmail.auto.tfvars     # Gmail address + App Password
+terraform -chdir=infra/terraform/10-foundation apply
 ```
 
-or edit them in the console. A re-apply will not revert them. `scripts/lab-creds.sh`
-(week 2) automates the DB-credential half of this.
+Leave them unset for a dry run: checkout answers "payment disabled", the mail worker
+logs each mail instead of sending it.
 
 ## Custom domain (`dns.tf`) — optional, opt-in
 

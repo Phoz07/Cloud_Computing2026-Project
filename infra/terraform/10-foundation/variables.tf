@@ -17,9 +17,9 @@ variable "project" {
 }
 
 variable "services" {
-  description = "The microservices that each get an ECR repo and a Secrets Manager secret."
+  description = "The microservices that each get an ECR repo."
   type        = list(string)
-  default     = ["auth", "event", "registration", "payment"]
+  default     = ["auth", "event", "registration", "payment", "mail-worker"]
 }
 
 variable "tool_images" {
@@ -28,12 +28,3 @@ variable "tool_images" {
   default     = ["db-bootstrap", "web"]
 }
 
-variable "uploads_cors_allowed_origins" {
-  description = <<-EOT
-    Origins allowed to PUT/GET the uploads bucket directly via presigned URLs.
-    "*" is fine for dev and the Swagger demo. Once the SPA has a real hostname
-    (week 3-4), tighten this to the CloudFront / custom-domain origins.
-  EOT
-  type        = list(string)
-  default     = ["*"]
-}

@@ -1,8 +1,10 @@
-# Event cover images. Browsers PUT directly here via presigned URLs from the
-# event service — bytes never enter the cluster (SYSTEM-DESIGN.md §6).
-#
-# This is the *uploads* bucket only. The static SPA bundle gets its own bucket in
-# 20-platform (or wherever CloudFront is wired up in week 4).
+# Uploaded files: avatars, event covers, event gallery assets. v2 uploads go
+# THROUGH the owning service as multipart (packages/storage, Bun's S3 client with
+# the session creds deploy.sh injects); the browser reads them back as
+# `/files/<key>`, which ingress-nginx rewrites to this bucket (infra/helm/eventide/
+# templates/files.yaml). Keys are `public/<users|events>/<id>/<folder>/<uuid>`, and
+# only `public/*` is anonymously readable (the policy below) — every other prefix
+# stays private.
 #
 # --- why the bucket is not an `aws_s3_bucket` resource -----------------------
 # The Learner Lab service control policy (p-lfgm2hv3) explicitly denies
@@ -36,13 +38,15 @@ data "aws_s3_bucket" "uploads" {
 resource "aws_s3_bucket_public_access_block" "uploads" {
   bucket = data.aws_s3_bucket.uploads.id
 
+  # ACLs stay blocked (BucketOwnerEnforced below). Public *policies* are allowed
+  # so the `public/*` read policy applies — the only public surface of the bucket.
   block_public_acls       = true
-  block_public_policy     = true
+  block_public_policy     = false
   ignore_public_acls      = true
-  restrict_public_buckets = true
+  restrict_public_buckets = false
 }
 
-# Disable ACLs entirely — presigned URLs are IAM-authorised, no ACL needed.
+# Disable ACLs entirely — access is policy-based (public/* read) or IAM (the services).
 resource "aws_s3_bucket_ownership_controls" "uploads" {
   bucket = data.aws_s3_bucket.uploads.id
   rule {
@@ -59,23 +63,27 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "uploads" {
   }
 }
 
-# The CORS policy that lets a browser PUT to a presigned URL. Getting this wrong
-# is the classic silent failure (PROJECT-KNOWLEDGE-BASE.md §4) — a browser PUT
-# fails with no useful error. ExposeHeaders(ETag) lets the SPA confirm the upload.
-resource "aws_s3_bucket_cors_configuration" "uploads" {
+# Anyone may read public/* (avatars, event images); nothing else. Mirrors the
+# minio-init policy in docker-compose.yml. Checked by `bash scripts/check-lab.sh`
+# (account-level Public Access Block); fallback if public policies are denied:
+# stream /files/* through the event service (spec D6).
+resource "aws_s3_bucket_policy" "uploads_public_prefix" {
   bucket = data.aws_s3_bucket.uploads.id
-
-  cors_rule {
-    allowed_methods = ["PUT", "GET", "HEAD"]
-    allowed_origins = var.uploads_cors_allowed_origins
-    allowed_headers = ["*"]
-    expose_headers  = ["ETag"]
-    max_age_seconds = 3000
-  }
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "PublicReadPublicPrefix"
+      Effect    = "Allow"
+      Principal = "*"
+      Action    = "s3:GetObject"
+      Resource  = "${data.aws_s3_bucket.uploads.arn}/public/*"
+    }]
+  })
+  depends_on = [aws_s3_bucket_public_access_block.uploads]
 }
 
-# Cover images are disposable (re-seeded every rebuild); no versioning.
-# But clean up multipart uploads the browser abandons mid-PUT.
+# Files are disposable (the DB is rebuilt every session); no versioning.
+# Clean up multipart uploads a service abandons mid-PUT.
 resource "aws_s3_bucket_lifecycle_configuration" "uploads" {
   bucket = data.aws_s3_bucket.uploads.id
 

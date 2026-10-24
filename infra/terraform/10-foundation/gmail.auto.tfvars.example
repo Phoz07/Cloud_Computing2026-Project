@@ -1,0 +1,17 @@
+# Copy to `gmail.auto.tfvars` (gitignored, auto-loaded).
+#
+#   cp gmail.auto.tfvars.example gmail.auto.tfvars
+#   # fill in the values
+#   terraform -chdir=infra/terraform/10-foundation apply
+#
+# gmail_app_password: a 16-char App Password from https://myaccount.google.com/apppasswords
+# (requires 2-Step Verification; personal Gmail — Workspace admins can disable it).
+# mail_from is optional; Gmail rewrites any address that isn't the account's own
+# unless it is added under "Send mail as".
+#
+# Only 10-foundation reads this. scripts/deploy.sh injects the secret into
+# eventide-mail-worker on the next `make deploy`. Empty = mail is logged, not sent.
+
+gmail_user         = ""
+gmail_app_password = ""
+mail_from          = ""
