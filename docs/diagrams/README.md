@@ -10,6 +10,9 @@ Terraform, Helm, deployment scripts, and system-design documentation.
 - [`eventide-system-design.html`](eventide-system-design.html) — the logical service and
   data ownership boundaries.
 
+- [`../architecture/aws/`](../architecture/aws/README.md) — the AWS **as-built** diagram (PNG, SVG and the
+  editable draw.io source) next to the original target architecture.
+
 The operational source of truth remains the scripts and Make targets. In particular, always
 finish an AWS session with `make down` and confirm that the teardown verification lists are
 empty.
