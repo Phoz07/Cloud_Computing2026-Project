@@ -257,10 +257,12 @@ place: `infra/aws.env`** (copy of `infra/aws.env.example`; gitignored; sourced b
 Make target and script). `infra/helm/eventide` (auth, event, registration, payment,
 mail-worker, redis, web, `/files` → S3, db-migrate hook) ·
 `scripts/{tf-init,deploy,teardown,k3d-up,k3d-down,admin,check-lab}.sh`. The k3d parity
-GATE passed locally; **the v2 layout has not been applied to AWS yet** — next lab session:
-paste creds → `bash scripts/check-lab.sh` → `dns.auto.tfvars` with the real domain →
-`make up` (tf-init carries the old `10-foundation` state over once) → `make deploy` →
-`make down`.
+GATE passed locally and **the first EKS session passed on 2026-10-24** (account
+524450451918, fresh build from zero: `make up` → `make deploy` → health/login/upload/mail/
+admin on `http://<nlb>`). **Not deployed:** a custom domain — none is available (2026-10-25), so
+there is no Route 53, ACM or Cloudflare: the site is opened through the NLB's own DNS name over
+`http://`, and Stripe's webhook and Google sign-in (both need https) stay off. The opt-in
+Terraform is in `infra/terraform/dns.tf`. Stripe keys are not set either.
 
 ### Read these before doing anything
 
@@ -282,7 +284,7 @@ contradicts one, flag it against that entry.
 
 Infrastructure does not compress under deadline pressure; features do.
 
-### Environment constraints (probed live against AWS account 735838417080, us-east-1)
+### Environment constraints (probed live against Learner Lab accounts 735838417080 and 524450451918, us-east-1)
 
 These are hard and load-bearing — most odd design choices trace back to one of them:
 
@@ -303,8 +305,8 @@ These are hard and load-bearing — most odd design choices trace back to one of
   granular `aws_s3_bucket_*` resources. See `infra/terraform/s3.tf`.
 - **`iam:GetRole` on `voclabs` is denied** — rules out `terraform-aws-modules/eks`. Raw
   `aws_eks_*` resources only.
-- **Unprobed (probed by `scripts/check-lab.sh` next session):** `sqs:*` and the account-level
-  S3 Public Access Block. Fallbacks: an ElasticMQ pod / streaming `/files/*` through `event`.
+- **Probed 2026-10-24 (account 524450451918):** SQS allowed; no account-level S3 Public Access
+  Block, so the `public/*` bucket policy applies. (`scripts/check-lab.sh` prints both.)
 - Session credentials expire with the 4-hour session. **Never start an EKS apply after hour 3.**
 - Re-run `bash scripts/check-lab.sh` after any lab reset — role suffixes and permissions change.
 
@@ -334,7 +336,7 @@ These are hard and load-bearing — most odd design choices trace back to one of
   the nightly EKS/RDS/NLB in `modules/platform` with `count = var.platform ? 1 : 0`.
   `make down` is `terraform apply -var platform=false` — a normal apply that destroys
   exactly the platform. The state bucket is created by `scripts/tf-init.sh`.
-- **DNS/TLS:** `events.<domain>` delegated to Route 53, apex on Cloudflare; zone + wildcard
+- **DNS/TLS (opt-in, NOT deployed — no domain available):** `events.<domain>` delegated to Route 53, apex on Cloudflare; zone + wildcard
   ACM cert are permanent (`infra/terraform/dns.tf`, opt-in via `dns.auto.tfvars`); the NLB
   TLS listener + ALIAS record rebuild with the platform. Single host — SPA at `/`, APIs at `/api/*`,
   files at `/files/*`, no CORS. Stripe's webhook and Google's redirect URI both need this
@@ -401,8 +403,9 @@ as the `AWS_*` GitHub secrets.
 1. The **assignment brief has never been seen** — every scope decision is inference.
 2. Exact **checkpoint date** and what it requires.
 3. **Final demo date.**
-4. The **real domain** for `infra/terraform/dns.auto.tfvars` (decided 2026-10-24: a real
-   domain, applied in the next lab session).
+4. **No domain** (2026-10-25): Route 53 / ACM / Cloudflare are not deployed. Without https,
+   Stripe's webhook and Google sign-in cannot work; the Stripe demo workaround is
+   `stripe listen --forward-to http://<nlb>/api/payment/webhook` from a laptop.
 
 ### Security
 

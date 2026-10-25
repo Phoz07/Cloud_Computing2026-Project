@@ -13,20 +13,22 @@ provider "aws" {
   }
 }
 
-# Token is generated client-side from the current AWS credentials (STS) — no
-# extra IAM permissions, refreshed on every plan/apply.
-data "aws_eks_cluster_auth" "this" {
-  count = var.platform ? 1 : 0
-  name  = module.platform[0].cluster_name
-}
-
+# Helm authenticates with a token fetched AT CONNECT TIME via `aws eks get-token`
+# (exec plugin). A data "aws_eks_cluster_auth" token is minted early in the apply
+# and expires after 15 minutes — EKS + RDS + the node group take longer, so the
+# first `make up` hit the API with a stale token (401). The exec plugin inherits
+# the credentials from infra/aws.env; the aws CLI must be on PATH.
 # helm provider v3: `kubernetes` is an attribute (`= {`), not a nested block.
-# Empty values while platform = false — no helm_release exists then, so the
+# Empty host while platform = false — no helm_release exists then, so the
 # provider is never asked to connect.
 provider "helm" {
   kubernetes = {
     host                   = try(module.platform[0].cluster_endpoint, "")
     cluster_ca_certificate = try(base64decode(module.platform[0].cluster_ca), "")
-    token                  = try(data.aws_eks_cluster_auth.this[0].token, "")
+    exec = {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args        = ["eks", "get-token", "--cluster-name", try(module.platform[0].cluster_name, var.project), "--region", var.region]
+    }
   }
 }
