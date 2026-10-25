@@ -11,7 +11,7 @@
 | ทั้งชุด | เวลารวม 19 → **~18 นาที** | วัดจากรายสไลด์ด้านล่าง |
 
 ข้อเท็จจริงที่อัปเดตใหม่ทั้งชุด:
-- **โดเมน https://eventide.creasy.club/** พร้อมใช้ (Route 53 zone เห็นจากการตรวจ DNS วันที่ 2026-10-25 — platform จะถูกทำลายเมื่อจบเซสชันตามพฤติกรรมที่ตั้งใจ ต้อง `make up` ก่อนการเดโมทุกครั้ง)
+- **โดเมน https://eventide.creasy.club/** พร้อมใช้ + **Google sign-in และ Stripe ชำระเงินเปิดใช้แล้ว** (ยืนยันโดยทีม 2026-10-25; Route 53 zone ตรงจากการตรวจ DNS — platform ถูกทำลายเมื่อจบเซสชัน ต้อง `make up` ก่อนเดโมทุกครั้ง)
 - ตัวเลขต้นทุนคำนวณใหม่แบบรายชิ้น (ดูสไลด์ 9) — ตัวเลข $0.27/hr + $1.10/session ใน SYSTEM-DESIGN §11 ไม่ลงตัวกับผลรวมองค์ประกอบ จึงไม่ใช้อีก
 - k6 / HPA (สไลด์ 11): วัด 2026-09-07 · node t3.medium ครั้งวัด · แค่ read path `/api/events` · ห้ามปนกับ EKS GATE 2026-10-24
 
@@ -29,7 +29,7 @@
 **Headline:** Eventide · เว็บขายตั๋วบน AWS ที่เปิดใช้จริง
 
 **Body:**
-- เว็บจริงอยู่ที่ https://eventide.creasy.club/ (กำลังรับเงิน Sandbox — ยังรอยืนยันโหมดงานจริง)
+- เว็บจริง: https://eventide.creasy.club/ — **Google sign-in และ Stripe ชำระเงินเปิดใช้แล้ว** (ยืนยันโดยทีม 2026-10-25)
 - ชื่อทีม / รายชื่อสมาชิก / วิชา Cloud Computing 2026
 - 7 images · 4 microservices · ราคา ~$50/งบทั้งเทอม
 
@@ -58,7 +58,7 @@
 - ปัญหา: ขายเกินโควตา, ผ่านการอนุมัติ, จ่ายแล้วไม่ได้ตั๋ว, ระบบล้นเมื่อ hotchg เรียกตัวเองผิด
 - **4 บทบาท** (นับ Guest): เอื่อยแบบเย็นกลุ่มและกลุ่มแท้กลุ่มที่กรรมการคุ้นเคย (Guest / user / organizer / admin)
 - อุดกันขายเกินตรงจุดเสี่ยงสุด (enroll): `SELECT … FOR UPDATE` + `seat_holds`
-- จ่ายผ่าน Stripe Checkout (Sandbox รูปร่างและโทนน้ำเสียงของภาพรวม [ยืนยันโหมด]) · เมลผ่าน SQS + mail-worker
+- จ่ายผ่าน Stripe Checkout — **เปิดใช้แล้ว** (ยืนยันโดยทีม 2026-10-25) · เมลผ่าน SQS + mail-worker
 - 4 microservices แยก process ต่าง port: auth 3001 / event 3002 / regis 3003 / payment 3004
 
 **Key number:** 4 บทบาท ที่คุมพฤติกรรมทั้งเว็บ · พวงที่สำคัญคือ seat-guarantee
@@ -154,7 +154,7 @@
 | ตำแหน่ง | ประเภท | เนื้อหา | แหล่ง | ขนาด | แคปชัน | สถานะ |
 |---|---|---|---|---|---|---|
 | แนวนอนกลาง | ภาพหลัก | temple เสา 6 ต้น 2 กลุ่ม: 3 สีเข้มทึบ (ครบถ้วน) เทียบ 3 สีอ่อน (บางส่วน มี "สลักประกอบ" ระบุช่องว่าง) | Canva วาดตาม B.1–B.7 | ~60% | "แบ่งตามระดับความมั่นใจใน B" | วาดใน Canva ★ |
-| ใต้เสา | ป้าย tag สั้น | OpEx "ทำซ้ำได้" · Perf "มีเลข k6" · Cost "คุม $50" · Reliability "ไม่มี chaos/RTO" · Security "ยังรอยืนยัน Google/Stripe" · Sustainability "ไม่มีเมตริก" | Canva | เล็ก | — | วาดใน Canva |
+| ใต้เสา | ป้าย tag สั้น | OpEx "ทำซ้ำได้" · Perf "มีเลข k6" · Cost "คุม $50" · Reliability "ไม่มี chaos/RTO" · Security "ไม่มี WAF/GuardDuty" · Sustainability "ไม่มีเมตริก" | Canva | เล็ก | — | วาดใน Canva |
 
 ---
 
@@ -283,16 +283,16 @@
 - ทุก service ผ่าน auth-guard: introspection สด + cache 60 วินาทีใน Redis; แบน/เปลี่ยนบทบาท = ระงับ session ทันที (databaseHooks)
 - RBAC (user / organizer / admin + Guest) + ownership macro: organizer แตะเฉพาะงานตัวเอง
 - S3 policy เปิดอ่านเฉพาะ key `public/*` (ทดสอบจริง 200/403) · RDS ต่อได้เฉพาะจาก node SG, ไม่ publicly accessible
-- HTTPS มีแล้ว: domain `eventide.creasy.club` + ACM ที่ NLB (Route 53 zone ผูกแล้ว ตรวจ DNS 2026-10-25) - Google sign-in และ Stripe webhook ยังรอยืนยันว่าเปิดใช้หรือยัง
+- HTTPS ทำงานผ่าน domain `eventide.creasy.club` + ACM ที่ NLB (ตรวจ DNS 2026-10-25) · **Google sign-in + Stripe webhook เปิดใช้แล้ว** (ยืนยันโดยทีม 2026-10-25)
 
 **Key number:** 1 ช่องทางเข้า (NLB) ตรวจ cookie ทุกคำขอ
 
 **Speaker notes:**
-กรรมการมักถามเรื่องข้อมูลผู้ใช้ - จุดขาย: session ถูกตรวจสดทุกคำขอ (auth-guard), ไฟล์ใน S3 มีเพียง prefix public เท่านั้นที่เปิดให้อ่าน และ HTTPS ทำงานผ่าน ACM ที่ NLB ตามที่ dns.tf กับ modules/platform (nlb.tf TLS listener, route53.tf ALIAS) ออกแบบไว้ - แต่ต้องพูดตรง: Google/Stripe ยังไมไ่ด้วยยืนยันเปิดแล้ว เพราะไฟล์ tfvars ที่แต่งใช้จริงไมอย้ใน repo (gitignored)
+กรรมการมักถามเรื่องข้อมูลผู้ใช้ - จุดขาย: session ถูกตรวจสดทุกคำขอ (auth-guard), ไฟล์ใน S3 มีเพียง prefix public เท่านั้นที่เปิดให้อ่าน และ HTTPS ทำงานผ่าน ACM ที่ NLB ตามที่ dns.tf กับ modules/platform (nlb.tf TLS listener, route53.tf ALIAS) ออกแบบไว้ - เสานี้ยังมีช่องว่างจริง ๆ อยู่ที่: ไม่มี WAF/Shield/GuardDuty/X-Ray และเครดิต session ของ pod หมดอายุเองทุกเซสชัน (trade-off ของ lab)
 
 **คำถามกรรมการที่ควรเตรียม:**
-- secret เก็บไหน? - Secrets Manager (`eventide/*`) → deploy.sh สร้าง k8s Secret แยกครีเอชาชนิด (auth / payment / mail-worker / common)
-- token ของ pod ส่ำอะไร? - session credentials ของ lab (S3 + SQS) หมดอายุทุกเซสชัน เลยต้อง `make deploy` ทุกครั้ง
+- secret เก็บไหน? - Secrets Manager (`eventide/*`) → deploy.sh สร้าง k8s Secret แยกตามหน้าที่ (auth / payment / mail-worker / common)
+- token ของ pod ใช้อะไร? - session credentials ของ lab (S3 + SQS) หมดอายุทุกเซสชัน เลยต้อง `make deploy` ทุกครั้ง
 
 **รูปภาพ - Visual Plan**
 | ตำแหน่ง | ประเภท | เนื้อหา | แหล่ง | ขนาด | แคปชัน | สถานะ |
@@ -340,7 +340,6 @@
 - Container Insights: ตั้ง **ปิด** ตั้งแต่ต้นเลย เพราะ CloudWatch agent ต้องขอ attach policy ที่ lab ปฏิเสธ (ยืนยันตั้งแต่ 2026-09-07) — ใช้ `kubectl top` + HPA log แทน
 - ไม่มี Chaos Testing, ไม่ได้วัด RTO/RPO และ Availability (คิดว่าไม่พอเวลา + งบ RDS)
 - เดิม "ไม่มีโดเมน" ไม่ใช่ข้อจำกัดแล้ว: dns.tf ถูก apply เป็น zone `eventide.creasy.club` (ตรวจ DNS 2026-10-25) — แต่ทุกเซสชันเริ่มเดโมต้อง `make up` ก่อน เว็บจึงออนไลน์
-- Google sign-in + Stripe webhook ที่ https เปิดแล้วหรือยัง ยังไม่ยืนยัน (ไฟล์ที่แต่งใช้ไม่อยู่ใน repo)
 
 **Key number:** เลิกพูด 'ไม่มี HTTPS' — ข้อจำกัดที่เหลือจริง: ทำลายทุกคืนตามงบ
 
@@ -363,8 +362,8 @@
 
 **Body:**
 - ทั้ง platform rebuild ซ้ำได้ทุกชิ้น: modules/platform = 25 resources ตรงทุกครั้งที่ apply
-- เว็บใช้ได้จริง: https://eventide.creasy.club/ (ต้อง `make up` ตอนเริ่มเซสชัน)
-- เสาแข็ง: OpEx · Perf · Cost - เสาที่ยังเผา: Reliability (ไม่มี chaos/RTO), Sustainability (ไม่มีเมตริก), Security (Google/Stripe รอยืนยัน)
+- เว็บใช้ได้จริง: https://eventide.creasy.club/ (ต้อง `make up` ตอนเริ่มเซสชัน) · Google sign-in + Stripe ชำระเงิน: เปิดใช้แล้ว
+- เสาแข็ง: OpEx · Perf · Cost - เสาที่ยังเผา: Reliability (ไม่มี chaos/RTO), Sustainability (ไม่มีเมตริก), Security (ไม่มี WAF/GuardDuty)
 - งบพอ: $0.18/ชม. ขึ้นเคลื่อน ล้างหมดตอนจบเซสชันทุกครั้ง
 
 **Key number:** 226.4 req/s ทดสอบจริง · $0.18/ชม. · https พร้อม
@@ -387,4 +386,4 @@
 
 - รวมเวลา 13 สไลด์ = **18 นาที** ยังเว้นเผื่อ Q&A/demo
 - สไลด์ใหม่เทียบเดิม: สไลด์ 5 แยกกลุ่มตาม B (ครบถ้วน 3 / บางส่วน 3) · สไลด์ 9 รวม Sustainability + Cost เดิม · เปลี่ยนเรื่องโดเมน/ต้นทุน/k6 ทั้งชุด
-- ทุกข้อความที่โยงไปเรื่อง domain/https/google/stripe ทางยิงในคำถามค้างท้าย A/B/D doc
+- ข้อความเรื่อง domain/https/Google/Stripe ทุกจุดใช้คำว่า 'เปิดใช้แล้ว ยืนยันโดยทีม 2026-10-25'

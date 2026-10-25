@@ -48,7 +48,7 @@ External: Stripe (checkout/webhook/refund) + Gmail SMTP (ไม่มี key = d
 | SQS | async เมล + DLQ | keep mail retry | visibility 30 s, long poll 10 s, maxReceiveCount 5 |
 | ELB (NLB) | ประตูสาธารณะ | อยู่ใน Terraform state (ไม่แนบ Service type LoadBalancer) | TCP :80 → NodePort; :443 = TLS listener ที่ใช้ ACM (มี dns) หรือ passthrough |
 | Route 53 + ACM | โอมากน + รับ TLS | dns.tf กำหนด assume wildcard | zone `eventide.creasy.club`; เห็นจาก DNS วันที่ 2026-10-25 (SOA จาก awsdns) |
-| Secrets Manager | เก็บคีย์ Google/Stripe/Gmail (opt-in) | แยกข้อมูลลับออกจาก git | 3 secrets: google-oauth / stripe / gmail (สถานะเปิดใช้จริง [ยืนยัน]) |
+| Secrets Manager | เก็บคีย์ Google/Stripe/Gmail | แยกข้อมูลลับออกจาก git | 3 secrets: google-oauth / stripe / gmail — **Google + Stripe เปิดใช้งานแล้ว** (ยืนยันโดยทีม 2026-10-25) |
 | ECR | เก็บ 7 images | ส่งมอบรูปเดียวทุกเซสชัน | ทุก session ผ่าน deploy.sh |
 | CloudWatch | Container Insights (ปิดทั้งแต่แรก) | lab ปฏิเสธ AttachRolePolicy (ยืนยัน 2026-09-07) | enable_container_insights=false ใน terraform vars — ใช้ kubectl top + HPA log แทน |
 | จาก seed ที่ยังไม่มีของจริง | — | — | CloudFront / Shield / WAF / EventBridge / ElastiCache / X-Ray / GuardDuty / VPC endpoints |
@@ -78,5 +78,5 @@ External: Stripe (checkout/webhook/refund) + Gmail SMTP (ไม่มี key = d
 | Route 53 zone `eventide.creasy.club` | **ใช้งานแล้ว** (zone delegate จาก Cloudflare; ตรวจผ่าน DNS-over-HTTPS) | DNS SOA จาก awsdns; dns.tf |
 | A/ALIAS record → NLB | ไม่มีอยู่วันนี้ (platform ถูกทำลาย ทุกครั้งต้อง make up ใหม่) | dns auto.tfvars (ไม่ได้ commit) |
 | ACM cert | สร้างร่วมกับ zone (dns.tf), NLB TLS listener ใน nlb.tf | ต้องยืนยันอีกชั้นหลัง make up |
-| Google sign-in | ต้อง config GOOGLE_CLIENT_* + https — ใช้เมื่อ domain https | vars, ไฟล์จริง [ยืนยัน] |
-| Stripe webhook | ลงทะเบียน endpoint https://eventide.creasy.club/api/payment/webhook | ต้องยืนยันโหมดจริงใน dashboard ที่ Stripe |
+| Google sign-in | **เปิดใช้งานแล้ว** | ยืนยันโดยทีม 2026-10-25 (Better Auth รองรับอยู่ที่ apps/auth) |
+| Stripe payment / webhook | **เปิดใช้งานแล้ว** | ยืนยันโดยทีม 2026-10-25 — endpoint https://eventide.creasy.club/api/payment/webhook |

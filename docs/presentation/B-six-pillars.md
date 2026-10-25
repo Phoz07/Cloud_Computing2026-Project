@@ -40,7 +40,7 @@
 - ความหมาย: identity + การแบ่งสิทธิ์ให้ทุกบทบาท และการปิดทางเข้าที่ไม่จำเป็น
 - ทำได้จริง: Better Auth cookie session + server-side introspection; การเปลี่ยนบทบาท/แบน ระงับ session ทันทีด้วย databaseHooks · RBAC (user/organizer/admin) + ownership macro (organizer แตะเฉพาะงานตนเอง) · S3 bucket policy เปิดเฉพาะ public/* (ทดสอบจริง 200/403) · RDS ต่อได้เฉพาะจาก node SG, ไม่ publicly accessible · Secrets ผ่าน Secrets Manager + k8s Secret per-service (ESO ปิด เหตุผลบันทึกไว้) · ใช้ Stripe sandbox; live key ถูกปฏิเสธถ้าไม่ prod
 - ตรงกับหลัก AWS: Strong identity foundation · Least privilege · Protect data in transit — **HTTPS มีแล้ว**: zone `eventide.creasy.club` (ตรวจ DNS 2026-10-25) + ACM ที่ NLB (dns.tf + modules/platform/nlb.tf)
-- ช่องว่าง (ต้องพูดตรง): Google sign-in / Stripe webhook ที่ https ยังไม่ยืนยันว่าเปิดใช้ (ไฟล์ที่แต่งจริงไม่อยู่ใน repo) · ไม่มี WAF/Shield/GuardDuty/X-Ray · เครดิต session ใน k8s Secret หมดอายุเอง (trade-off ยอมรับได้ในสภาพ lab) · ยังไม่เปิด rate-limit ตาม Better Auth (ต้องยืนยัน)
+- ช่องว่าง (ต้องพูดตรง): ไม่มี WAF/Shield/GuardDuty/X-Ray · เครดิต session ใน k8s Secret หมดอายุเอง (trade-off ยอมรับได้ในสภาพ lab) · ยังไม่เปิด rate-limit ตาม Better Auth (ต้องยืนยัน) · Google sign-in + Stripe ชำระเงิน: **เปิดใช้แล้ว** (ยืนยันโดยทีม 2026-10-25 — จุดแข็งที่เพิ่มล่าสุด)
 - ระดับความมั่นใจ: **บางส่วน** — identity/ระดับสิทธิ์แข็ง network/TLS ยัง open
 
 ## B.6 Cost Optimization (ม่วง)
@@ -62,4 +62,4 @@
 | Security (เทาเข้ม) | Better Auth + RBAC + S3 policy + SG | บางส่วน — app-level แข็ง, network/HTTPS ยังระงับ |
 | Cost (ม่วง) | Cost model + teardown ritual | แข็งที่สุด — ทุกตัวเลขคำนวณรายชิ้นได้ (ยังไม่มี credit-meter วัดจริง) |
 
-สรุปกลุ่ม: **ครบถ้วน** = Cost · OpEx · Performance — **บางส่วน** = Reliability (ไม่มี chaos/RTO) · Sustainability (ไม่มีเมตริก) · Security (Google/Stripe รอยืนยัน)
+สรุปกลุ่ม: **ครบถ้วน** = Cost · OpEx · Performance — **บางส่วน** = Reliability (ไม่มี chaos/RTO) · Sustainability (ไม่มีเมตริก) · Security (ไม่มี WAF/GuardDuty)
