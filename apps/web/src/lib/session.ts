@@ -33,9 +33,10 @@ export function useSignOut() {
       if (error) throw error;
     },
     onSuccess: async () => {
-      // drop everything cached for the previous user
-      queryClient.clear();
+      // Drop everything cached for the previous user, but keep the session query itself:
+      // clear() detaches mounted observers (the navbar), so they would never see the null.
       queryClient.setQueryData(sessionQueryOptions.queryKey, null);
+      queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== sessionQueryOptions.queryKey[0] });
       await navigate({ to: "/" });
       await router.invalidate();
     },
