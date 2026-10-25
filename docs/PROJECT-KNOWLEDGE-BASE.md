@@ -302,7 +302,7 @@ These block nothing today, but two of them could invalidate scope decisions.
 
 ### Added 2026-10-24
 
-- **Which real domain** goes into `10-foundation/dns.auto.tfvars`? Decided: a real domain (not `stripe listen`), applied next lab session. Stripe's webhook endpoint and Google's redirect URI both hang off it.
+- ~~Which real domain goes into `dns.auto.tfvars`?~~ **Superseded 2026-10-25: there is no domain.** Route 53 / ACM / Cloudflare are not deployed; the site is served over `http://<NLB DNS name>` (:443 is a TCP passthrough with a self-signed cert). Consequences: Stripe's webhook and Google sign-in (both need https) stay off; the demo workaround for Stripe is `stripe listen --forward-to http://<nlb>/api/payment/webhook`. The IaC (`infra/terraform/dns.tf`) stays opt-in for if a domain appears.
 - Gmail App Password / Stripe sandbox key: **dry run for now** (mail logged, payment off) — `*.auto.tfvars` turn them on with no code change.
 
 ## 7. Immediate next actions

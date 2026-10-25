@@ -259,8 +259,10 @@ mail-worker, redis, web, `/files` → S3, db-migrate hook) ·
 `scripts/{tf-init,deploy,teardown,k3d-up,k3d-down,admin,check-lab}.sh`. The k3d parity
 GATE passed locally and **the first EKS session passed on 2026-10-24** (account
 524450451918, fresh build from zero: `make up` → `make deploy` → health/login/upload/mail/
-admin on `http://<nlb>`). **Not yet done:** the real domain (`dns.auto.tfvars` → Route 53 +
-ACM → HTTPS, which Stripe's webhook and Google OAuth need), Stripe/Gmail credentials.
+admin on `http://<nlb>`). **Not deployed:** a custom domain — none is available (2026-10-25), so
+there is no Route 53, ACM or Cloudflare: the site is opened through the NLB's own DNS name over
+`http://`, and Stripe's webhook and Google sign-in (both need https) stay off. The opt-in
+Terraform is in `infra/terraform/dns.tf`. Stripe keys are not set either.
 
 ### Read these before doing anything
 
@@ -334,7 +336,7 @@ These are hard and load-bearing — most odd design choices trace back to one of
   the nightly EKS/RDS/NLB in `modules/platform` with `count = var.platform ? 1 : 0`.
   `make down` is `terraform apply -var platform=false` — a normal apply that destroys
   exactly the platform. The state bucket is created by `scripts/tf-init.sh`.
-- **DNS/TLS:** `events.<domain>` delegated to Route 53, apex on Cloudflare; zone + wildcard
+- **DNS/TLS (opt-in, NOT deployed — no domain available):** `events.<domain>` delegated to Route 53, apex on Cloudflare; zone + wildcard
   ACM cert are permanent (`infra/terraform/dns.tf`, opt-in via `dns.auto.tfvars`); the NLB
   TLS listener + ALIAS record rebuild with the platform. Single host — SPA at `/`, APIs at `/api/*`,
   files at `/files/*`, no CORS. Stripe's webhook and Google's redirect URI both need this
@@ -401,8 +403,9 @@ as the `AWS_*` GitHub secrets.
 1. The **assignment brief has never been seen** — every scope decision is inference.
 2. Exact **checkpoint date** and what it requires.
 3. **Final demo date.**
-4. The **real domain** for `infra/terraform/dns.auto.tfvars` (decided 2026-10-24: a real
-   domain, applied in the next lab session).
+4. **No domain** (2026-10-25): Route 53 / ACM / Cloudflare are not deployed. Without https,
+   Stripe's webhook and Google sign-in cannot work; the Stripe demo workaround is
+   `stripe listen --forward-to http://<nlb>/api/payment/webhook` from a laptop.
 
 ### Security
 
