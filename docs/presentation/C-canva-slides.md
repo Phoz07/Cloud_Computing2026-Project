@@ -1,398 +1,390 @@
-# C-canva-slides.md — ซับเท็กซ์ต่อสไลด์
+# C-canva-slides.md — ซับเท็กซ์ต่อสไลด์ (ฉบับแก้ไข รอบสอง, 2026-10-25)
 
-14 สไลด์ / 20 นาที (~1.4 นาที/สไลด์)
+**13 สไลด์ / ~18 นาที** (เว้นเผื่อ Q&A + demo ~2 นาที)
 
-## กฎการออกแบบ (อ่านก่อนลง Canva)
+## การเปลี่ยนแปลงจากฉบับ 14 สไลด์
 
-- **ระบายสี 6 เสา** (ใช้เหมือนกันทุกสไลด์):
-  - Operational Excellence = ฟ้า `#1F7BC0`
-  - Performance Efficiency = ส้ม `#E8830C`
-  - Reliability = เขียวสด `#2E9E3E`
-  - Sustainability = เขียวอมฟ้า `#1FA88A`
-  - Security = เทาเข้ม `#3D4451`
-  - Cost Optimization = ม่วง `#7B4FD0`
-- สไลด์เสา 1 ต้น = ไฮไลต์เฉพาะ "ชิ้นสถาปัตยกรรมที่เกี่ยวข้อง" ด้วยเส้นขอบ/ป้ายสีเสานั้น ส่วนที่เหลือของไดอะแกรมหรี่ลง (ความสว่าง ~40%) — ไม่วาดใหม่ ใช้ไดอะแกรม as-built ชุดเดียวซ้ำทุกสไลด์
-- หลักภาพ: 1 ภาพหลัก + ไอคอน ≤4 ต่อสไลด์ · ภาพ evidence จริงมาก่อน stock
-- ตัวเลขทุกตัวมีแหล่งที่มาระบุไว้แล้ว ห้ามแต่งเพิ่ม `[ไม่พบข้อมูล]` ใช้เมื่อไม่มีจริง
-- ฟอนต์ไทย: Google Sans Thai / Sarabun หัวข้อใหญ่ ตัวเลขเด่น
+| เดิม | ใหม่ | เหตุผล |
+|---|---|---|
+| 9 (Sustainability) + 11 (Cost) | **9 รวมเป็นสไลด์เดียว** "Sustainability + Cost" | เสาเดียวกันทางกลไก (ทั้งคู่หลุดแขนงที่ "ตัด/ทำลายทรัพยากรเมื่อไม่ใช้") — ลดเวลา 1.4 นาที |
+| 10→10, 12→11, 13→12, 14→13 | เลขใหม่เรียงตามลำดับ | เมื่อรวมสไลด์แล้วเหลือ 13 |
+| ทั้งชุด | เวลารวม 19 → **~18 นาที** | วัดจากรายสไลด์ด้านล่าง |
+
+ข้อเท็จจริงที่อัปเดตใหม่ทั้งชุด:
+- **โดเมน https://eventide.creasy.club/** พร้อมใช้ (Route 53 zone เห็นจากการตรวจ DNS วันที่ 2026-10-25 — platform จะถูกทำลายเมื่อจบเซสชันตามพฤติกรรมที่ตั้งใจ ต้อง `make up` ก่อนการเดโมทุกครั้ง)
+- ตัวเลขต้นทุนคำนวณใหม่แบบรายชิ้น (ดูสไลด์ 9) — ตัวเลข $0.27/hr + $1.10/session ใน SYSTEM-DESIGN §11 ไม่ลงตัวกับผลรวมองค์ประกอบ จึงไม่ใช้อีก
+- k6 / HPA (สไลด์ 11): วัด 2026-09-07 · node t3.medium ครั้งวัด · แค่ read path `/api/events` · ห้ามปนกับ EKS GATE 2026-10-24
+
+## กฎการออกแบบ (คงเดิม)
+
+- **สร้างสี 6 เสา** ใช้เหมือนเดิมทุกสไลด์ — Operational Excellence (ฟ้า `#1F7BC0`), Performance Efficiency (ส้ม `#E8830C`), Reliability (เขียวสด `#2E9E3E`), Sustainability (เขียวอมฟ้า `#1FA88A`), Security (เทาเข้ม `#3D4451`), Cost Optimization (ม่วง `#7B4FD0`)
+- สไลด์เสา 1 ต้น = ไฮไลต์เฉพาะ "ชิ้นสถาปัตยกรรมที่เกี่ยว" ด้วยเส้นขอบสีเสานั้น, ส่วนที่เหลือปรับความสว่าง ~40% — ใช้ไดอะแกรม as-built ชุดเดียวซ้ำทุกสไลด์ ไม่วาดใหม่
+- ระวังเรื่องข้อมูลบนหน้าจอ: ห้ามให้ NLB DNS `*.elb.amazonaws.com` ปรากฏบนภาพถ่ายจริง (แคปแล้วปกด้วยป้าย "production host: eventide.creasy.club")
+- ตัวเลขพูดแล้วต้องมีแหล่ง — ใช้ "[ไม่พบข้อมูล — ต้องยืนยัน]" ถ้าไม่พบไฟล์จริง
 
 ---
 
-## สไลด์ 1/14 — หน้าปก (~0.5 นาที)
+## สไลด์ 1/13 — หน้าปก (~0.5 นาที)
 
-**Headline:** Eventide · ระบบขายตั๋วงานบน AWS (EKS + Terraform)
+**Headline:** Eventide · เว็บขายตั๋วบน AWS ที่เปิดใช้จริง
 
 **Body:**
-- ชื่อทีม / รายชื่อสมาชิก / ภาควิชา IT KMITL
-- รายวิชา Cloud Computing 2026
-- ตัวเลขสรุปบนปก: 1 คลัสเตอร์ EKS · 4 microservices · $50 cap
+- เว็บจริงอยู่ที่ https://eventide.creasy.club/ (กำลังรับเงิน Sandbox — ยังรอยืนยันโหมดงานจริง)
+- ชื่อทีม / รายชื่อสมาชิก / วิชา Cloud Computing 2026
+- 7 images · 4 microservices · ราคา ~$50/งบทั้งเทอม
 
-**Key number:** 7 images บน ECR · 1 คลัสเตอร์ EKS
+**Key number:** 7 images · 4 microservices · $50 budget cap
 
 **Speaker notes:**
-เปิดด้วยประโยคเดียว: "Eventide คือเว็บขายตั๋วจริงที่ deploy บน EKS ด้วย Terraform ทั้งหมด ภายใต้งบ $50 ของ Learner Lab" ย้ำว่าทุกอย่างในสไลด์ต่อไปคือของจริงที่รันผ่าน ไม่ใช่แผนภาพ
+เปิดเปล่า: "Eventide ได้ deploy ไป EKS จริงด้วย Terraform และเว็บถูกเปิดใช้ที่ https://eventide.creasy.club/ — ระหว่างเซสชันที่ระบบถูกทำลายไว้ ต้องตั้งค่า `make up` ก่อนเดโมจึงเห็นเว็บ" (พฤติกรรม "ทำลายทุกคืน" เป็นข้อบังคับงบ)
 
-**คำถามกรรมการที่ควรเตรียม:** ทำไมเลือก EKS ไม่ใช้ ECS/Lambda? — ตอบ: เป้าหมายเรียนรู้ Kubernetes เต็มรูปแบบ + lab ให้ create cluster ได้ (ดู docs/PROJECT-KNOWLEDGE-BASE.md)
+**คำถามกรรมการที่ควรเตรียม:** ทำไมเลือก EKS ไม่ใช้ ECS/Lambda?
+- ตอบ: โจทย์บังคับ microservices กลุ่มคลัสเตอร์ + lab ปฏิเสธไม่ให้ระบุ (`aws_eks_*` สร้างได้) ที่ docs/PROJECT-KNOWLEDGE-BASE.md
 
 🖼️ **Visual Plan**
 | ตำแหน่ง | ประเภท | เนื้อหา | แหล่ง | ขนาด | แคปชัน | สถานะ |
 |---|---|---|---|---|---|---|
-| ครึ่งขวา | ภาพหลัก | หน้าจอเว็บจริง | `docs/screenshots/01-home.png` | ~50% ของสไลด์ | "หน้าเว็บจริง ทำงานบน EKS" | พร้อมใช้ |
+| ครึ่งขวา | ภาพหลัก | screenshot เว็บจริงจาก https://eventide.creasy.club/ (ไม่ใช้ภาพ `*.elb.amazonaws.com`) | เว็บ production ต้อง `make up` เสียก่อน | ~50% | "เว็บจริง (2026-10 วันเดโม)" | ต้องแคปเพิ่ม |
 | มุมซ้ายบน | โลโก้/ไอคอน | Eventide logo | วาดใน Canva | เล็ก | — | ต้องวาดใหม่ |
 | แถบล่าง | ไอคอน 3 ตัว | k8s, AWS, Terraform | Canva elements | เล็ก | — | วาดใน Canva |
 
 ---
 
-## สไลด์ 2/14 — ปัญหาและโซลูชัน (~1.5 นาที)
+## สไลด์ 2/13 — ปัญหาและโซลูชัน (~1.5 นาที)
 
-**Headline:** ขายตั๋วต้องไม่ซ้ำ ไม่หาย และคุ้มตังค์
+**Headline:** ขายตั๋วต้องไม่ขายเกิน โกงไม่ได้ ระบบไม่พัง
 
 **Body:**
-- ปัญหาขายตั๋ว: overbook, โกงจ่าย, ตึงระบบตอนรัชชั่วโมง
-- 3 บทบาท: user / organizer / admin (จัดงานได้เฉพาะของตัวเอง)
-- ควบคุมที่นั่งด้วย row lock + seat hold ใน Postgres
-- จ่ายผ่าน Stripe, ส่งเมลผ่าน SQS queue
-- 4 microservices แยก process, คุยกันผ่าน HTTP + cookie session
+- ปัญหา: ขายเกินโควตา, ผ่านการอนุมัติ, จ่ายแล้วไม่ได้ตั๋ว, ระบบล้นเมื่อ hotchg เรียกตัวเองผิด
+- **4 บทบาท** (นับ Guest): เอื่อยแบบเย็นกลุ่มและกลุ่มแท้กลุ่มที่กรรมการคุ้นเคย (Guest / user / organizer / admin)
+- อุดกันขายเกินตรงจุดเสี่ยงสุด (enroll): `SELECT … FOR UPDATE` + `seat_holds`
+- จ่ายผ่าน Stripe Checkout (Sandbox รูปร่างและโทนน้ำเสียงของภาพรวม [ยืนยันโหมด]) · เมลผ่าน SQS + mail-worker
+- 4 microservices แยก process ต่าง port: auth 3001 / event 3002 / regis 3003 / payment 3004
 
-**Key number:** 3 ชนิดตั๋ว: first_come · approval · invite
+**Key number:** 4 บทบาท ที่คุมพฤติกรรมทั้งเว็บ · พวงที่สำคัญคือ seat-guarantee
 
 **Speaker notes:**
-เล่าปัญหาแบบเล่าเรื่อง: "ขายตั๋วงานผิดพลาดแค่จุดเดียวคือตั๋วเกิน — Eventide กันที่จุดที่ยากที่สุดคือการ enroll โดยล็อกแถว ticket_types ก่อนนับที่นั่งเสมอ" ชี้ว่าโดเมนแยกชัด (auth 3001 / event 3002 / regis 3003 / payment 3004)
+เล่าแบบเรื่องเล่า: ที่นั่งต้องถือ tag เดียวกันไม่ว่าใคร "cold-check" กันขายเกินที่จุดที่เสี่ยงสุด คือ enroll ซึ่งล็อกแถว ticket_types ใน postgreSQL ก่อนนับที่นั่ง — Guest ยังเข้า web ได้ แต่ไม่มีสิทธิ์อื่น
 
-**คำถามกรรมการ:** กัน oversell ยังไง? — ตอบ: `SELECT … FOR UPDATE` บนแถว ticket_types ใน transaction + ตาราง seat_holds (AGENTS.md §Tickets)
+**คำถามกรรมการ:** กันขายเกินยังไง?
+- ตอบ: tx ล็อกแถว ticket_types (`SELECT … FOR UPDATE`) + ตาราง `seat_holds` + maxPerUser — พิสูจน์ด้วย test "concurrent enrollments never take more seats than the quota" (apps/registration/test/enrollment.test.ts)
 
 🖼️ **Visual Plan**
 | ตำแหน่ง | ประเภท | เนื้อหา | แหล่ง | ขนาด | แคปชัน | สถานะ |
 |---|---|---|---|---|---|---|
-| ซ้ายกลาง | ภาพหลัก | 3 การ์ดบทบาท user/organizer/admin | Canva | ~35% | "3 บทบาท 4 สิทธิ์" | วาดใน Canva |
-| ขวาบน | ภาพจริง | screenshot รายการตั๋ว 3 ชนิด | `docs/screenshots/03-event-detail.png` | ~30% | "สินค้า 3 ชนิดต่างกันที่กติกา" | พร้อมใช้ |
+| ซ้ายกลาง | ภาพหลัก | 4 การ์ดบทบาท Guest / user / organizer / admin | Canva | ~35% | "4 บทบาท 1 บัญชี" | วาดใน Canva |
+| ขวาบน | ภาพจริง | screenshot event-detail หน้าตั๋วครบทุกประเภท | ต้องแคปผ่านเว็บ production (เตรียมบัญชี test ใช้รับรู้เห็นจริง) | ~30% | "first_come / approval / invite" | ต้องแคปเพิ่ม |
 | กรอบล่าง | ไอคอน | lock, clock, ticket, mail | Canva | เล็ก | — | วาดใน Canva |
 
 ---
 
-## สไลด์ 3/14 — ข้อจำกัด Learner Lab (~1.5 นาที)
+## สไลด์ 3/13 — ข้อจำกัด Learner Lab (~1.5 นาที)
 
-**Headline:** ตีขอบ $50: เล่นตามกฎของ lab
+**Headline:** ตีกรอบ $50: ทุกข้อจำกัดมีเหตุผลจากการ probe
 
 **Body:**
-- งบ $50 เข้มงวด — เกินคือระงับบัญชี ลบงานทั้งหมด
-- session ละ ~$1.10 · ต้อง `make down` ทุกครั้งที่เลิกใช้
-- IAM ถูกปฏิเสธ: สร้าง IAM Role / OIDC / CloudFront ไม่ได้
-- ไม่มี NAT gateway — ใช้ default VPC ตรง ๆ (public subnet)
-- ทุกข้อจำกัด probe ด้วยสคริปต์ `check-lab.sh` ไม่กดโดยการันตรี
+- งบ $50 เข้มงวด เก็นบัญชีถูกระงับ → destroy/rebuild ทุกเซสชัน
+- เซสชัน 4 ชม. หมดอายุ: S3 ใช้ session creds → `make deploy` ทุกเซสชัน
+- IAM ถูกปฏิเสธ: ไม่สร้าง IAM Role / OIDC / ติด policy / CloudFront
+- ไม่มี NAT gateway — default VPC, subnets pin 3 AZ us-east-1
+- โดเมนมีแล้ว: zone `eventide.creasy.club` ทำงานที่ Route 53 (ทำงานแบบ delegated จาก Cloudflare) — ACM ติด NLB อัตโนมัติทุก `make up`
 
-**Key number:** $1.10 / session · $50 cap
+**Key number:** $50 cap · 4 ชม./เซสชัน · rebuild จากศูนย์ 25 รายการ
 
 **Speaker notes:**
-สไลด์นี้ป้องกันทุกคำถาม "ทำไมไม่ใช้ X" — X คือ O จากการทดลองจริง (docs/lab-probe-2026-09-0{6,7}.txt) เช่น CloudFront ถูก deny จาก SCP ของ org, สร้าง IAM role ไม่ได้เลยต้อง reuse LabEksClusterRole ที่ lab ให้มา ย้ำหลักการ: infrastructure ไม่ยืดหยุ่นตาม deadline, ฟีเจอร์ตัดได้
+สไลด์นี้ป้องกันคำถาม "ทำไมไม่ใช้ X" — ทุกข้อมีหลักฐานระบุเอกสารใน docs/lab-probe-2026-09-0{6,7}.txt และ docs/PROJECT-KNOWLEDGE-BASE.md; ขอเน้นแถวสุดท้าย: โดมีนมีแล้ว (ต่างจากแพะ 2026-10-24 ที่ยังไม่มี) แต่หลังจบเซสชัน platform ถูกทำลาย ทำให้ทุกครั้งต้อง `make up` + ACM แนบใหม่ตามระบบย่อ
 
-**คำถามกรรมการ:** ถ้าเป็น production ต้องเติมอะไร? — ตอบ: IRSA, NAT gateway, CloudFront, Route53+ACM (วาดไว้แล้วใน dns.tf แต่ไม่มีโดเมนจริง)
+**คำถามกรรมการ:** ถ้าเป็น production ต้องเติมอะไร?
+- ตอบ: IRSA (แทนจับ session creds), NAT gateway, CloudFront, monitoring แบบ alert ไปที่มือถือ
 
 🖼️ **Visual Plan**
 | ตำแหน่ง | ประเภท | เนื้อหา | แหล่ง | ขนาด | แคปชัน | สถานะ |
 |---|---|---|---|---|---|---|
 | ซ้าย | ตัวเลขใหญ่ | "$50" เด่นที่สุดของสไลด์ | Canva text | ~40% สูง | "งบเพดาน" | วาดใน Canva |
-| ขวา | ตาราง 2 คอลัมน์ | "อยากใช้ → ข้อจำกัดจริง" 5 แถว | Canva จาก lab-probe | ~50% | "จากการ probe จริง" | วาดใน Canva |
-| ภาพรอง | screenshot | หน้า learner lab (ถ้ามีถ่ายไว้) | ถ่ายเอง/Canva | เล็ก | — | ต้องแคปเพิ่ม |
+| ขวา | ตาราง 2 คอลัมน์ | "อยากใช้ → ข้อจำกัดจริง" 5 แถว | Canva จาก lab-probe | ~50% | "จากการ probe จริง 2026-09-06/07" | วาดใน Canva |
+| กรอบล่าง | ไอคอน | money-off, key, globe | Canva | เล็ก | — | วาดใน Canva |
 
 ---
 
-## สไลด์ 4/14 — สถาปัตยกรรม As-Built (~2 นาที) ★สไลด์แกน
+## สไลด์ 4/13 — สถาปัตยกรรม As-Built (~2 นาที) ★สไลด์แกน
 
-**Headline:** แผนที่จริง: เทอร์ราฟอร์ม → EKS → RDS/S3/SQS
+**Headline:** แผนที่จริง: Terraform → EKS → RDS/S3/SQS
 
 **Body:**
-- Terraform 1 root: NLB + EKS + RDS + SQS + ECR + S3
-- 7 images: web, auth, event, regis, payment, mail-worker, migrate
-- traffic ทาง NLB → ingress-nginx → Ingress 2 ชุด (API / files→S3)
-- Redis + Postgres เป็น pod/บริการแยกภายในคลัสเตอร์
-- CI: push ไป main → GitHub Actions → ECR → helm upgrade
+- Terraform 1 root: EKS + RDS + NLB + SQS + ECR + S3 (+ Route 53 ที่ dns.tf)
+- 7 images: web, auth, event, regis, payment, mail-worker, db-migrate (+ Redis เป็น pod ล้วน ๆ ใน chart)
+- traffic: NLB (TLS จาก ACM) → ingress-nginx NodePort → Ingress 2 ชุด (API / files→S3)
+- Postgres = RDS db.t3.micro หนึ่ง instance นอกคลัสเตอร์ / Redis = pod ในคลัสเตอร์
+- CI: push สาขา main → GitHub Actions → ECR → helm upgrade (migrate รันก่อนทุกครั้ง)
 
-**Key number:** 7 ECR repos · 1 NLB · 1 RDS `db.t3.micro`
+**Key number:** 25 resources เท่ากันทุกครั้งที่สร้างชุดเดิม (modules/platform 23 + 2 helm releases)
 
 **Speaker notes:**
-ใช้ไดอะแกรม as-built เป็นภาพหลักและใช้ต่อในทุกสไลด์เสา (ไฮไลต์ชิ้นส่วนที่เกี่ยวข้องในขณะที่ชิ้นส่วนอื่นสลัว) เน้น "ทุก daemon ในแผนภาพมีไฟล์ .tf รองรับ" หยิบจุดแข็ง: ออกแบบตามข้อจำกัด — NLB ต้องสร้างโดย Terraform เพราะ Service แบบ LoadBalancer จะ orphan นอกสเตต
+ใช้ไดอะแกรม as-built เป็นภาพหลักและนำมาใช้ต่อในทุกสไลด์เสา — จุดขาย: ออกแบบตามข้อจำกัดจริง เพิ่มเติมเองแบบให้กรรมการถามว่า "ทุกชุดในแผนภาพเกิดจากการ apply ได้แน่หรือไม่" ตอบตรง ๆ: ของระดับ infra (NLB/RDS/SQS ฯลฯ) มี .tf รองรับ, แหล่ง pods (รวม Redis) ใหญ่หลังจากไฟล์ Helm เพราะ Helm เป็นตัว deploy (เพื่อความสม่ำเสมอ ไม่ลืมในขณะถาม) — พูดว่า "สิ่งที่ระบุด้วย infra ล้วนย้อนกลับใน git หมด" ข้อความแบบนั้น
 
-**คำถามกรรมการ:**
-- ทำไมไม่แยก RDS ต่อ service? — ทั้ง schema เป็น FK เดียวกัน + db.t3.micro ต่อ ~87 connections (docs/REPORT.md §2)
-- Session ซ้ายที่ pod ตายไหม? — auth-guard เรียก get-session แล้ว cache Redis 60s
+**คำถามกรรมการที่ควรเตรียม:**
+- ทำไมใช้ RDS ตัวเดียว ไม่แยกฐานข้อมูลราย service? - ตอบ: (1) ต้นทุน — db.t3.micro ทำ RDS ต่อ service ไม่ทันจริง ≈87 connections ของ single micro ต้องระวังทุก instance (DB_POOL_MAX=4/pod) จึงปฏิเสธแบบเดิม; (2) โมเดลเกม: services ใช้ table กันข้าม (ผู้ซื้อ = FK โยง users กรองอย่างแยกเฉพาะชุด) จึงโยงกันถึงที่, (3) ง่ายต่อ migrate: hook เดียวกัน ไม่ต้อง sync หลาย DB
+
+- Session พังถ้า pod ตาย? - auth-guard ทำ introspection แล้ว cache Redis 60 วินาที การ reconnect จะทำงานต่อเอง
 
 🖼️ **Visual Plan**
 | ตำแหน่ง | ประเภท | เนื้อหา | แหล่ง | ขนาด | แคปชัน | สถานะ |
 |---|---|---|---|---|---|---|
-| เต็มพื้น | ภาพหลัก | ไดอะแกรม as-built เต็มสไลด์ | `docs/architecture/aws/eventide-aws-as-built.png` | ~70% | "As-Built 2026-10-24" | พร้อมใช้ ★ |
+| เต็มพื้น | ภาพหลัก | ไดอะแกรม as-built เต็มสไลด์ (แสดง RDS อยู่นอกคลัสเตอร์ + Route 53 ถ้ามี) | `docs/architecture/aws/eventide-aws-as-built.png` | ~70% | "As-Built (ของจริง)" | พร้อมใช้ ★ |
 | มุมขวาล่าง | สติกเกอร์ | Terraform + Helm + k8s | Canva | เล็ก | — | วาดใน Canva |
 
 ---
 
-## สไลด์ 5/14 — แผนที่ 6 เสา W-A (~1 นาที)
+## สไลด์ 5/13 — แผนที่ 6 เสา (~1 นาที)
 
-**Headline:** ตรวจ 6 เสา: แข็งไหน กร่อนไหน
+**Headline:** ตรวจ 6 เสา: ครบถ้วน 3 · บางส่วน 3
 
 **Body:**
-- 6 เสา: OpEx · Perf · Reliability · Sustainability · Security · Cost
-- จัดกลุ่ม: แข็งแรง (Cost, OpEx) / ยังบอกได้บางส่วน (Perf, Security, Sustainability) / อ่อน (Reliability)
-- สไลด์ต่อไป 6 หน้า = 1 เสา 1 หน้า ใช้รูปแบบเดียวกัน
-- ทุกข้อความอ้างอิงไฟล์จริงใน repo
+- **ครบถ้วน** (มีของ + มีหลักฐาน): OpEx · Perf · Cost
+- **บางส่วน** (กลไกอยู่ แต่ยังพิสูจน์/วัดไม่ครบ): Reliability · Security · Sustainability
+- ทุกข้อคุยได้: ข้อดีให้ไฟล์, ข้อเสียบอกพร้อมทางแก้ที่ตัดไว้ทำไม
+- สไลด์ที่ 6–10 = 1 เป้ามี 1 ต้น (สไลด์ 9 รวม 2 เสา Sustainability + Cost)
 
-**Key number:** 6 เสา · 18+ ตารางหลักฐาน
+**Key number:** ตารางแบ่ง 2 กลุ่ม ตาม B ยกมาตรฐานจาก B.1–B.7
 
 **Speaker notes:**
-สไลด์บูรณาการก่อนเจาะ — บอกกรรมการว่า "เราให้คะแนนตัวเองตามหลักฐาน ไม่ใช่ความรู้สึก" ให้เห็นสีแล้ว รู้ลำดับที่กำลังจะเจอ แสดงเมทริกซ์เล็กถ้ามีที่ว่าง
+สไลด์บอกกรรมการว่าเราให้ประเมินตัวเองเป็น "ครบถ้วน/บางส่วน" ไม่ใช่เปอร์เซ็นต์ เที่ยงธรรมเพราะ 6 เสาใช้มาตรฐานต่างกัน ติดคำตอบของกลุ่ม "บางส่วน" ไว้เลย เช่น "ไม่มี chaos / RTO — เตรียมเลื่อนเป็นตัวเต็มเชิงวิศวกรรม repo ได้" — ห้ามทำเป็น % (ไม่มีข้อมูลให้เอาตั้งเดิมทำ)
 
 🖼️ **Visual Plan**
 | ตำแหน่ง | ประเภท | เนื้อหา | แหล่ง | ขนาด | แคปชัน | สถานะ |
 |---|---|---|---|---|---|---|
-| แนวนอนกลาง | ภาพหลัก | ธรรมดา 6 เสา: วาดเสา 6 ต้นเรียงสี 6 สีเรียงสี, ติด % ของเสาแข็ง | Canva | ~60% | "คะแนนจากหลักฐาน" | วาดใน Canva ★ |
-| ใต้เสา | text | ติด tag สั้นบนแต่ละเสา: "ระบบอัตโนมัติเต็ม" / "ทดสอบจริง k6" / "ไม่มี DR" / "on-demand 41%" / "IAM+เข้มแต่ไม่มี WAF" / "ตัดฟีเจอร์เก็บเงิน" | Canva | เล็ก | — | วาดใน Canva |
+| แนวนอนกลาง | ภาพหลัก | temple เสา 6 ต้น 2 กลุ่ม: 3 สีเข้มทึบ (ครบถ้วน) เทียบ 3 สีอ่อน (บางส่วน มี "สลักประกอบ" ระบุช่องว่าง) | Canva วาดตาม B.1–B.7 | ~60% | "แบ่งตามระดับความมั่นใจใน B" | วาดใน Canva ★ |
+| ใต้เสา | ป้าย tag สั้น | OpEx "ทำซ้ำได้" · Perf "มีเลข k6" · Cost "คุม $50" · Reliability "ไม่มี chaos/RTO" · Security "ยังรอยืนยัน Google/Stripe" · Sustainability "ไม่มีเมตริก" | Canva | เล็ก | — | วาดใน Canva |
 
 ---
-## สไลด์ 6/14 - Operational Excellence (ฟ้า #1F7BC0) (~1.4 นาที)
+
+## สไลด์ 6/13 - Operational Excellence (ฟ้า #1F7BC0) (~1.4 นาที)
 
 **Headline:** ทำซ้ำได้ทั้งระบบ ไม่ต้องมีทีม ops
 
 **Body:**
-- ทั้งแพลตฟอร์มเป็น Terraform code เดียว สร้าง/ลบด้วย make up / make down
-- deploy = make deploy เดียว: สร้าง 7 images, แทน k8s Secrets, helm upgrade
-- migrate รันก่อน pods ทุกครั้ง ผ่าน pre-upgrade hook ในเชิงติดตั้ง (chart)
-- CI: test + build ทุก PR, push main จะ deploy เอง (env หมดอายุก็ข้ามอย่างปลอดภัย)
-- ช่องว่าง: ไม่มี runbook ที่เป็นทางการ [ไม่พบข้อมูล - ต้องยืนยัน]
+- แพลตฟอร์มทั้งก้อนเป็น code ที่ git ตรวจได้ ( Terraform + charts )
+- `make deploy` รันชุดเดียวจบ: สร้าง 7 images ที่ ECR → อัปเดต k8s Secrets → helm upgrade
+- migrate รันก่อน pods ทุกครั้งผ่าน Helm pre-upgrade hook (`db-migrate`)
+- CI: test + build ทุก PR, push main เปิด deploy เอง (เมื่อ credentials หมดอายุ job ข้ามเอง)
+- ช่องว่าง: ไม่มี runbook ที่เป็นทางการ [ไม่พบข้อมูล — ต้องยืนยัน]
 
-**Key number:** 1 คำสั่ง deploy · 7 images ทุกครั้ง
+**Key number:** 3 นาที `helm upgrade` ทำงานทุกส่วน (อ้าง ci.yml + scripts/deploy.sh)
 
 **Speaker notes:**
-หัวใจของเสานี้คือ "ผู้ดูแลทีมเดียวทำซ้ำได้" ทุกขั้นตอนเป็น code ที่อ่านได้จาก git: terraform สำหรับแพลตฟอร์ม, helm สำหรับ pods, Makefile เป็น UI ของมนุษย์ ถ้ากรรมการถามเรื่อง incident - ตอบว่ายังไม่มี runbook และไม่ยอมแต่งเรื่อง
+หัวใจเสานี้คือ "ผู้ดูแลคนเดียวทำซ้ำได้" — ทุกขั้นเป็นไฟล์ที่อ่านได้แม้โดยกรรมการ: Terraform สำหรับแพลตฟอร์ม, Helm สำหรับ pods, Makefile เป็นหน่วยของมนุษย์ ทำให้ rollout ไม่หิวของคำนิยามง่าย ๆ: `db-migrate` hook คือ merge หนึ่งครั้ง = ระบบถูก update ตาม
 
-**คำถามกรรมการที่ควรเตรียม:** deploy ได้ไหมถ้าลืม make down? - ตอบ: ได้ แต่ค่าระบบยังคงจ่าย session ต่อ, CI deploy ยังช่วยให้ระบบกลับมาได้
+**คำถามกรรมการที่ควรเตรียม:** ถ้าลืม `make down` เกิดอะไรขึ้น?
+- ตอบ: ต่ำในวันถัดไป session หรือ lab auto-stop จะตัด EC2 (แต่ EKS + RDS + NLB คิดเงินต่อ ~$3.40/วัน) — สรุปเป็นความเสี่ยงเวลา
 
-**รูปภาพ - Visual Plan**
+🖼️ **Visual Plan**
 | ตำแหน่ง | ประเภท | เนื้อหา | แหล่ง | ขนาด | แคปชัน | สถานะ |
 |---|---|---|---|---|---|---|
-| ขวากลาง | ภาพหลัก | terminal แสดง make deploy สำเร็จ | แคปจาก commit log / terminal | 45% | "1 คำสั่ง ทั้งเคลสเตอร์" | ต้องแคปเพิ่ม |
-| ใต้ภาพหลัก | ไอคอน | Terraform, Helm, GitHub | canva elements | เล็ก | - | วาดใน canva |
+| ขวากลาง | ภาพหลัก | terminal แสดง logs make deploy ที่ push 7 images + helm success สำเร็จ | session log | 45% | "1 คำสั่ง = deploy ทั้งเคลสเตอร์" | ต้องแคปเพิ่ม |
+| ใต้ภาพ | ไอคอน | Terraform, Helm, GitHub | canva elements | เล็ก | - | วาดใน canva |
 
 ---
 
-## สไลด์ 7/14 - Performance Efficiency (ส้ม #E8830C) (~1.4 นาที)
+## สไลด์ 7/13 - Performance Efficiency (ส้ม #E8830C) (~1.4 นาที)
 
-**Headline:** รับกระแส 226 req/s บนของเดิม
+**Headline:** เครื่องจริงทดสอบแล้ว: 226 req/s ขึ้นเคลื่อน
 
 **Body:**
-- k6 load test: 98,500 requests, 226.4 req/s, p95 = 430.56 ms
-- HPA อัตโนมัติ 2 -> 3 -> 5 -> 7 -> 8 เมื่องานหนัก
-- cache Redis: session (TTL 60s) จึงไม่ยิง RDS ทุกคำขอ
-- service cache รายละเอียด event เพื่อลด queries ซ้ำ ๆ
-- Single RDS `db.t3.micro` ยังไหว เพราะลดการแตะ RDS ให้น้อยที่สุด
+- k6 (วัด 2026-09-07): 98,500 requests, 226.4 req/s, ผ่าน 99.89%, p95 430.56 ms
+- HPA ของ service `event` (apps/event) ขยายด้วยตัวเอง 2→8 pods ตามพิโกรธ CPU >60% (และกลับลงเอง)
+- cache: session 60 วินาที (auth-guard), event detail 5 นาที (Redis) - ลดการถาม RDS ซ้ำ
+- WebSocket แจ้งที่นั่งสด: นับใหม่รอยละ 250 ms + resync 30 วิ (deployment ยกมาจาก repo)
+- ตัวเลขมาจาก node t3.medium + test เฉพาะ read path `/api/events` - booking path ยังไม่ได้ทดสอบ
 
-**Key number:** 226.4 req/s, ผ่านเกณฑ์ k6 99.89%
+**Key number:** 226.4 req/s p95 430.56 ms HPA 60% CPU target
 
 **Speaker notes:**
-เสานี้แข็งเพราะมีตัวเลขจากการทดสอบจริง (docs/autoscaling-evidence.txt) เน้นว่าเรา breath-test ด้วย k6 กับ 200 VU แล้วระบบ scale-out เองด้วย HPA ไม่ต้องมีคนกดปุ่ม เชื่อมโยง: pod เริ่มที่ 2 แล้วเพิ่มเองเมื่อ CPU เกินขีดจากไฟล์ autoscaling-evidence.txt
+ขอเน้นคำล้อ: "ตัวเลขนี้วัดจริง 2026-09-07 บน EKS (node t3.medium)" - มาจากไฟล์ `docs/autoscaling-evidence.txt` ซึ่งกรรมการสามารถไปตรวจได้ - ยืนยันเองแล้วว่า test เป็นแค่ GET /api/events ฉะนั้น booking ยังต้อง scale ด้วยวิธีอื่น: ใช้ lock ใน DB ป้องกัน, ยังไม่วัดตัวเลขของ path นั้น; ทดสอบได้อีกขั้นหลังเทอม
 
 **คำถามกรรมการที่ควรเตรียม:**
-- p95 430 ms ดีไหม? - ตอบ: ไม่เร็วสุดแล้ว เพราะ DB ที่ t3.micro + cookie-introspection auth ไม่สามารถผ่านก่อน, เราเร่งไปได้ด้วย Redis session cache 60 วินาที
-- สลับไปแยก cache table? - เปลือง RDS
+- ทดสอบใน production/จริงหรือไม่? - ทดสอบเป็นพื้นฐาน ไม่มีของระดับ global, ใช้ CPU 60-80%(high) + สั่งจาก SPAs ที่ไม่สวยแยกไว้น้อย
 
-**รูปภาพ - Visual Plan**
+- ผลคำตอบที่จบไม่ 100%? - 15.0%(ค่าเดิม)-แสดง 0.10% fail (198/197,000)ระบุที่มามาจาก check ที่เสียในไฟล์ evidence
+
+🖼️ **Visual Plan**
 | ตำแหน่ง | ประเภท | เนื้อหา | แหล่ง | ขนาด | แคปชัน | สถานะ |
 |---|---|---|---|---|---|---|
-| กลางสไลด์ | กราฟเส้น/บาร์ | HPA 2->8 เมื่อ k6 ยิง | docs/autoscaling-evidence.txt (วาดใหม่ใน canva) | 45% | "จาก pod 2 ไป 8 อัตโนมัติ" | ต้องวาดใหม่ |
-| ขวาบน | badge | 226 req / p95 430ms | canva text | เล็ก | - | วาดใน canva |
-| ขวาล่าง | ไอคอน | gauge, bolt, db | canva | เล็ก | - | วาดใน canva |
+| กลางสไลด์ | กราฟหลัก | แผนภาพมุม `HPA นับ pod: 2-3-5-7-8 แล้วกลับ 8-6-4-2` แกนสองตัวเลข CPU วัด | canva วาดจาก docs/autoscaling-evidence.txt | 45% | "HPA ทำงานจริง วัด 2026-09-07" | ต้องวาดใหม่ |
+| ขวาบน | badge | 226 req/s · p95 430 ms | canva text | เล็ก | - | วาดใน canva |
+| ขวาล่าง | ไอคอน | bolt, gauge | canva | เล็ก | - | วาดใน canva |
 
 ---
 
-## สไลด์ 8/14 - Reliability (เขียวสด #2E9E3E) (~1.4 นาที)
+## สไลด์ 8/13 - Reliability (เขียวสด #2E9E3E) (~1.4 นาที)
 
-**Headline:** เสาที่ยังไม่แข็ง: ตรวจจับแต่ไม่มี DR
+**Headline:** pod ล้ม = ระบบช่วยตัวเอง / DB ล้ม = ยังไม่กันได้
 
 **Body:**
-- pod ล้ม = k8s ดีดพื้นที่ health probe แล้วสร้างใหม่เอง
-- health endpoint ไม่แตะ RDS/Redis ตามกฎของ repo (กัน blip กลายเป็น restart ทั้งระบบ)
-- RDS: multi_az = false, backup_retention_period = 0 บนของเดิม
+- k8s health probe: daemon ตรวจ endpoint HTTP ที่ไม่แตะ RDS (กัน blip ระเบิดเป็น restart ทั้งคลัสเตอร์) [ไม่มี chaos ทดสอบ]
+- ซ้อมกู้คืนทุกเซสชัน: `make down` 8m56s · `make up` 16m37s · 25 resources จากศูนย์ (วัด 2026-09-07 ใน REPORT.md; จำนวน resource ตรงกับโครงปัจจุบัน ขั้นที่ต่าง: migrate ย้ายเป็น db-migrate hook)
+- RDS: multi_az=false + backup=0 → "ไม่มี backup จึงกู้ข้อมูลไม่ได้ (RPO ไม่มีขอบเขต)"
+- SQS + DLQ: เมลส่งไม่สำเร็จ retry แล้วแตกคิว DLQ (5 ครั้ง)
 - Availability %, RTO, RPO: **[ไม่พบข้อมูล]** ไม่มีการวัดจริง
-- ไม่มี Chaos Testing ใน repo เลย
 
-**Key number:** backup = 0 วัน → RPO = 0 วัน
+**Key number:** rebuild จากศูนย์ ~25 นาที (ลบ 8m56s + ขึ้น 16m37s) - แต่ไม่ใช่ RTO ของ RDS
 
 **Speaker notes:**
-สไลด์ความซื่อสัตย์ — บอกตรง ๆ ว่า reliability คือเสาที่อ่อนที่สุด: k8s กัน pod ล้มได้ แต่ถ้า RDS ดับจริง ไม่มี replica, ไม่มี backup, ไม่มี DR plan เหตุผลบนประวัติ: งบ $50 ของ t3.micro ทำ multi-AZ ไม่ทัน และการถ่ายแผนคือเปิด multi-AZ + backup 1 วัน + ประเมินงบใหม่
+สไลด์ซื่อสัตย์สุดของชุด: กลไก k8s ระดับ pod กันได้ ลองที่ระดับ data ยังไม่มี ตัวเลข rebuild ตาม REPORT §; ย้ำแบบจับต้องได้: จำนวน 25 resources ตรงกับโครงปัจจุบัน (module รวม 25) แต่ barcode ที่ต่างคือขั้นตอนหลัง apply ย้ายเป็น db-migrate hook แทน db-bootstrap เดิม - และย้ำให้ชัด: ตัวเลขชุดนี้คือความเร็ว rebuild platform ทั้งก้อน ไม่ใช่ RTO ของ RDS
 
 **คำถามกรรมการที่ควรเตรียม:**
-- RDS โดนแล้วระบบเป็นอย่างไร? - ตอบ: ทุก service error ทันที (health ไม่แตะ RDS เพื่อไม่ให้ pod restart ตามไปด้วย)
-- ปรับแก้ที่ไหนก่อน? - ตอบ: เปิด backup_retention ก่อน (ถูกกว่า multi-AZ) แล้วจึง multi-AZ = true
+- RDS โดนแล้วระบบเป็นอย่างไร? - ทุก service พังทันที (health ตั้งไม่ให้แตะ RDS เพื่อไม่ดึง pod ทั้งหมดสู่ restart จากนั้น)
+- ปรับแก้ที่ไหนก่อน? - เปิด backup_retention ก่อน (ถูกกว่า multi-AZ) แล้วจึง multi-AZ = true
 
-**คำถามกรรมการที่ควรเตรียม:**
-- ระบบดับแล้ว user เห็นอะไร? - k8s ตรวจ health ของ pod แล้ว ทดลองด้วย [ไม่พบข้อมูล - ไม่มี chaos test]
-- แก้ยังไงเร็วสุด? - เปิด RDS multi-AZ และ backup = 1 วัน (ราคาแพงขึ้น)
-
-**รูปภาพ - Visual Plan**
+🖼️ **Visual Plan**
 | ตำแหน่ง | ประเภท | เนื้อหา | แหล่ง | ขนาด | แคปชัน | สถานะ |
 |---|---|---|---|---|---|---|
-| ขวากลาง | ภาพหลัก | วาดง่าย ๆ: pod ตาย -> k8s เปิดใหม่เอง พร้อมไอคอนหัวใจ/สุขภาพ | canva | 45% | "k8s self-heal ระดับ pod" | ต้องวาดใหม่ |
-| ขวาล่าง | ป้ายกำกับ | "RTO / RPO [ไม่วัด]" | canva | เล็ก | - | วาดใน canva |
+| ขวากลาง | ภาพหลัก | ไดอะแกรมเรียบ: pod ตาย arrow k8s เปิดใหม่ + RDS เป็นเงาเทาแสดงว่ายังไม่มีกลไกกู้ | canva | 45% | "pod self-heal / RDS ยังไม่มีเขียนตาม" | วาดใน canva |
+| ขวาล่าง | ป้ายเลข | "down 8m56s / up 16m37s / 25 resources (2026-09-07)" | canva text | เล็ก | - | วาดใน canva |
 
 ---
 
-## สไลด์ 9/14 - Sustainability (เขียวอมฟ้า #1FA88A) (~1.4 นาที)
+## สไลด์ 9/13 - Sustainability + Cost (เขียวอมฟ้า #1FA88A + ม่วง #7B4FD0) (~2 นาที) [รวม 2 เสา]
 
-**Headline:** ปลดจองทรัพยากรทิ้งเมื่อไม่ทำงาน
+**Headline:** จ่ายเมื่อใช้ ล้างเมื่อเลิก: ต้นทุนที่คำนวณแยกชิ้น
 
 **Body:**
-- `make down` ท้าย session: ลบ EKS + RDS + NLB ทั้งหมด - แทบ 0 ค่าใช้จ่ายรายวันจากแพลตฟอร์ม
-- HPA ลด pod ลงเองเมื่อ traffic ผ่อน (2 -> 8 -> 2 วัดจริง)
-- คลัสเตอร์เล็ก t3.micro/t3.medium เปลืองทรัพยากรหัวหน่วยต่ำกว่าที่จะ scale-up node
-- เมชแนวคิด: platform = count = 0 คือ carbon ที่ดีที่สุดคือไม่มี compute ติด
+- **ต้นทุนต่อชั่วโมง (คำนวณจากราคาแยกรายชิ้น, us-east-1):**
+  · EKS control plane **$0.100/ชม.** (ปิดไม่ได้ — ลบกลายเป็นตัวตัด) `[คำนวณ]`
+  · NLB **$0.023/ชม.** · RDS db.t3.micro **$0.018/ชม.** (รวม storage 20 GB) `[คำนวณ]`
+  · node 2 × **t3.small** ($0.021/ชม. ต่อตัว) = $0.0416/ชม. ขึ้นเคลื่อน หรือสูงสุด 2 × **t3.medium** = $0.083/ชม. (ครั้ง load test)
+- **รวมขึ้นเคลื่อน: $0.18/ชม.** (ตกแต่งจริง t3.small), **$0.23/ชม.** ตอนวัด load test — เทียบ 4 ชม. เซสชัน ≈ **$0.73–0.90**
+- **ไว้ทิ้งค้างคืน: ~$3.40/วัน** (EKS $2.40 + NLB $0.54 + RDS $0.43 — lab ปิด EC2 ให้เอง) `[คำนวณ, ตรงกับ SYSTEM-DESIGN §11]`
+- ปิดยกกล่อง: `make down` จบทุกเซสชัน — platform=false ตัดค่าค้างทั้งก้อน, ตัด NAT / CloudFront / RDS ต่อ service / Prometheus ตั้งแต่ตั้ง
+- ยอมเก็บยังไม่เทคแคร์: ยังไม่มีค่าจาก credit meter วัดจริง → ห้ามขาย "$25 actual"
 
-**Key number:** platform=false = compute เหลือ 0 ทุกคืน
+**Key number:** $0.18/ชม. (ขึ้นเคลื่อนปกติ) · ~$3.40/วัน (ค้างคืน)
 
 **Speaker notes:**
-เล่าว่าระบบจ่ายค่า compute เมื่อเรียกใช้เพราะ deploy มี lifecycle สั้น เสานี้ความจริงบอกตรง ๆ ว่า sustainability ของ Eventide ทำได้ดีโดยบังเอิญของข้อจำกัดคือ ล้างทุกคืนด้วย make down จริง (terraform apply -var platform=false) ไม่ใช่เพราะมี metric carbon
+จุดต่างจากครั้งก่อน: เคยยกตัวเลข $0.27/hr + $1.10/session จาก SYSTEM-DESIGN §11 มาแบบตรง ๆ — ที่บัจจุบันยกคนละเต็ม รุปผลรวมรายชิ้นไม่ลงตัวกับบันทึกเดิม จึงเปลี่ยนเป็นคำนวณเองที่มีองค์ประกอบรายชิ้นแนบไว้; หน้าสนุกไม่เชิงคำนวณ: "การปิดระดับ Sustainability และประหยัดเงินใช้คำสั่งเดียวกัน คือ make down" กลไกทั้งสองเสาเป็นตัวเดี่ยว เลยไม่ waste สไลด์
 
-**คำถามกรรมการที่ควรเตรียม:** แล้วถ้าต้องรัน production จริง?
-- ตอบ: HPA ยังช่วย แต่ต้องมี right-sizing node group + spot capacity [ยังไม่ทำ]
+**คำถามกรรมการที่ควรเตรียม:**
+- ค่าใช้จ่ายต่อเทอมเป็นเท่าไร? - ตอบ: [ไม่พบข้อมูล — ไม่มีค่าวัดจาก credit meter] ตามประมาณเทอมที่คำนวณอยู่ในระดับ สิบเครื่องต่อ 4-ชม. หลายครั้ง
+- ตกหล่นราคาถูกที่จากการทำงานใหม่ - คำตอบ: HPA ยังช่วยแต่ต้องขึ้น node ที่อุดตันตมต่อ instance
 
-**รูปภาพ - Visual Plan**
+🖼️ **Visual Plan**
 | ตำแหน่ง | ประเภท | เนื้อหา | แหล่ง | ขนาด | แคปชัน | สถานะ |
 |---|---|---|---|---|---|---|
-| ขวากลาง | ภาพหลัก | วาดง่าย ๆ: สายวงกลม "make up -> demo -> make down -> 0 compute" | canva | 45% | "ทุก resource กลับ scaffold เป็น 0 ทุกคืน" | ต้องวาดใหม่ |
-| ขวาล่าง | ไอคอน | leaf, recycle | canva | เล็ก | - | วาดใน canva |
+| กลาง | ภาพหลัก | ฝาสตัวเลข 3 ใบ: $0.100 (EKS) + $0.023 (NLB) + $0.018 (RDS) = $0.14 ขั้นต่ำ + node | canva วาด, ตัวเลขรายชิ้น | 45% | "ทำลายวัตถุระบบสาธารณะไม่เคยลืม" | วาดใน canva |
+| กรอบล่าง | ไอคอน | dollar, drift, recycle | canva | เล็ก | - | วาดใน canva |
 
 ---
 
-## สไลด์ 10/14 - Security (เทาเข้ม #3D4451) (~1.4 นาที)
+## สไลด์ 10/13 - Security (เทาเข้ม #3D4451) (~1.4 นาที)
 
-**Headline:** ความปลอดภัย: แยกตามชั้นที่ทำได้จริง
+**Headline:** ความปลอดภัยแยกชั้น: cookie + IAM + HTTPS
 
 **Body:**
-- auth แยก service เดียวเก็บ secret (BETTER_AUTH_SECRET) + guard ทุก service
-- ทุก service ส่ง introspection ตรวจ real-time + cache 60s ใน redis
-- ข้อมูลเข้าระบบ S3 แบบ public เฉพาะ key ขึ้นต้น `public/*` เท่านั้น
-- อื้อเป็น secret ปลอดภัย: credentials อยู่ Secrets Manager ไม่ลง pods
-- จุดอ่อน: ยังไม่มี HTTPS (ไม่มีโดเมน) ทำให้ Google/Stripe หลุดไป
+- auth (Better Auth) แยก service เดียว คนเดียวที่ถือ BETTER_AUTH_SECRET ไม่ลงโค้ด
+- ทุก service ผ่าน auth-guard: introspection สด + cache 60 วินาทีใน Redis; แบน/เปลี่ยนบทบาท = ระงับ session ทันที (databaseHooks)
+- RBAC (user / organizer / admin + Guest) + ownership macro: organizer แตะเฉพาะงานตัวเอง
+- S3 policy เปิดอ่านเฉพาะ key `public/*` (ทดสอบจริง 200/403) · RDS ต่อได้เฉพาะจาก node SG, ไม่ publicly accessible
+- HTTPS มีแล้ว: domain `eventide.creasy.club` + ACM ที่ NLB (Route 53 zone ผูกแล้ว ตรวจ DNS 2026-10-25) - Google sign-in และ Stripe webhook ยังรอยืนยันว่าเปิดใช้หรือยัง
 
-**Key number:** 4 k8s Secrets แบ่งตามสิทธิ์ + 3 secrets อยู่ Secrets Manager
+**Key number:** 1 ช่องทางเข้า (NLB) ตรวจ cookie ทุกคำขอ
 
 **Speaker notes:**
-เสานี้กรรมการชอบถามตรงเรื่อง user data "คุกกี้ session ถูกตรวจ live ทุกคำขอ ผ่าน auth-guard" และ file access ทุกไฟล์ไม่ใช่ public นอกจากอยู่ key `public/*` ย้ำว่า HTTPS ถูกออกแบบแล้ว (dns.tf ACM + cert วางไว้) แต่ยังไม่เข้า domain ระดับ lab จึงไม่เล่นทุกของใหญ่ (Google/Stripe)
+กรรมการมักถามเรื่องข้อมูลผู้ใช้ - จุดขาย: session ถูกตรวจสดทุกคำขอ (auth-guard), ไฟล์ใน S3 มีเพียง prefix public เท่านั้นที่เปิดให้อ่าน และ HTTPS ทำงานผ่าน ACM ที่ NLB ตามที่ dns.tf กับ modules/platform (nlb.tf TLS listener, route53.tf ALIAS) ออกแบบไว้ - แต่ต้องพูดตรง: Google/Stripe ยังไมไ่ด้วยยืนยันเปิดแล้ว เพราะไฟล์ tfvars ที่แต่งใช้จริงไมอย้ใน repo (gitignored)
 
 **คำถามกรรมการที่ควรเตรียม:**
-- HTTPS ไม่ส่งสำคัญไหม? - ใช่ และแก้ได้ด้วย dns.tf เมื่อมี domain จริง
-- token อยู่ไหน? - ที่ lab session มี role IAM ร่วมจาก eventide-common
+- secret เก็บไหน? - Secrets Manager (`eventide/*`) → deploy.sh สร้าง k8s Secret แยกครีเอชาชนิด (auth / payment / mail-worker / common)
+- token ของ pod ส่ำอะไร? - session credentials ของ lab (S3 + SQS) หมดอายุทุกเซสชัน เลยต้อง `make deploy` ทุกครั้ง
 
 **รูปภาพ - Visual Plan**
 | ตำแหน่ง | ประเภท | เนื้อหา | แหล่ง | ขนาด | แคปชัน | สถานะ |
 |---|---|---|---|---|---|---|
-| ขวากลาง | ภาพหลัก | ตัดของอย่างเป็นชั้น: web -> NLB -> ingress -> service -> (cookie guard) -> DB | canva วาดจาก architecture | 50% | "ประตู cookie เดียว ผ่านทางเดียว" | ต้องวาดใหม่ |
+| ขวากลาง | ภาพหลัก | ชั้นความปลอดภัยทีละขั้น: NLB (ACM) -> ingress -> auth-guard -> RDS/S3 bucket policy | canva วาดจาก architecture | 50% | "ประตูเดียว ตรวจ cookie ทุกคำขอ" | ต้องวาดใหม่ |
 | ขวาล่าง | ไอคอน | lock, shield, key, s3 | canva | เล็ก | - | วาดใน canva |
 
 ---
 
-## สไลด์ 11/14 - Cost Optimization (ม่วง #7B4FD0) (~1.4 นาที)
+## สไลด์ 11/13 - Test Results (~1.5 นาที)
 
-**Headline:** เสาที่แข็งที่สุด: ตัดของแต่ไม่ตัดหลัก
+**Headline:** วัดจริงสองครั้ง: load test กับ GATE เดโม
 
 **Body:**
-- งบ $50 เป็นข้อบังคับจึงตัดทุกอย่างที่ไม่ load-bearing จริง
-- ใช้ make down ท้าย session เลิกจ่ายทันที รอมี session หน้าค่อยคืน
-- RDS t3.micro เดียว + pod pool ต่ำ = ค่าจองเกมต่ำสุด
-- ตัดทิ้งตั้งแต่ต้น: NAT, CloudFront, RDS ต่อ service, Prometheus
-- ~$0.27/ชม (~$3.40/วัน) ตาแหล่งจากทีมคำนวณใน SYSTEM-DESIGN.md §11
+- **ครั้งวัดที่ 1 วันที่ 2026-09-07 (load test):** node 2 x t3.medium, path เดียว GET /api/events
+  · k6: 98,500 requests, 200 VU, 226.4 req/s, avg 316.74 ms, p95 430.56 ms
+  · fail = 0.10% (checks 198/197,000, http 99/98,500) - ผ่าน 99.89%
+  · HPA ของ `event`: CPU target 60%, min 2 max 8 - เห็นทั้ง 2->8 และ 8->6->4->2
+- **ครั้งที่ 2 อีกสิ่ง (ไม่ใช่ load):** EKS GATE 2026-10-24 - deploy จากศูนย์ผ่านครบหมวด (health, session, S3, เมล, admin, HPA metrics live)
+- เก็บติดว่า: booking path (enroll/checkin) ยังไม่เคย load test - กัน oversell พิสูจน์ที่ test ไม่ใช่ load test
 
-**Key number:** $0.27/ชม · ~$1.10/session · $50 cap
+**Key number:** 226.4 req/s · fail 0.10% · HPA target 60% CPU
 
 **Speaker notes:**
-เสาที่แข็งที่สุดเพราะถูกบังคับทุกครั้งที่ออกแบบ: ทุกค่าใช้จ่ายต้องมีเหตุผล ตัวเลข $0.27/ชม มาจากตารางต้นทุนใน SYSTEM-DESIGN.md; หลักการคือ platform=false คืนเงินทั้งก้อนทิ้ง session
+ให้แยกสองหลักฐานให้ชัด (1) load test 2026-09-07 สร้างเป็นตัวเลขประสิทธิภาพ เก็บใน docs/autoscaling-evidence.txt ที่ node t3.medium ทดที่ GET /api/events เท่านั้น (2) EKS GATE 2026-10-24 ทดสอบเจาะที่ความสามารถ deploy + ผ่าน user story ไม่ใช่ตัวเลขโหลด หลักการ HPA: เมื่อ CPU เฉลี่ยของ pods เกิน target 60% จะเพิ่มจำนวน replicas; ต่ำกว่า target ไปหนึ่งช่วงจะลดลง — เห็นทั้งข้า้ก้าน (2->8) และข้า้ลง (8->2) เครื่องวัดคือ metrics-server (deploy ด้วย kubelet-insecure-tls)
 
 **คำถามกรรมการที่ควรเตรียม:**
-- ค่าถูกสุดอยู่ตรงไหน? - ตอบ: ไม่จ่ายตอนไม่ใช้ (make down), RDS เดียว shared, ไม่มี NAT/CloudFront
-- ถ้าขยาย user จริงจะแพงแค่ไหน? - ตอบ: t3.micro อุดตันที่ connections ~87, ต้องขึ้น instance ก่อน
+- ปัญหาที่เจรในเซสชัน test นี้? - เริ่มหน้า 10 มี warning "failed to get cpu utilization" ช่วงแรก (metrics-server ยังไม่แห้ง) ช่วงหลังมาแล้ว เป็นข้อมูลจริง [ยืนยันใหม่ตามข้อ]
+- booking path ยังไม่โดน load test - ตอบ: ยอมรับ จะต้องนำไป test เดิมเพิ่ม (POST /enroll, /checkin)
 
 **รูปภาพ - Visual Plan**
 | ตำแหน่ง | ประเภท | เนื้อหา | แหล่ง | ขนาด | แคปชัน | สถานะ |
 |---|---|---|---|---|---|---|
-| ขวากลาง | ภาพหลัก | การ์ดตัวเลข 3 ใบ: $0.27/hr, $1.10/session, $50 cap | canva วาด, ตัวเลขจาก SYSTEM-DESIGN.md #11 + terraform | 45% | "ทุก service จ่ายในระบบ" | ต้องวาดใหม่ |
-| ขวาล่าง | ไอคอน | dollar, scissors, down-arrow | canva | เล็ก | - | วาดใน canva |
+| กลางซ้าย | กราฟหลัก | ขั้น pod HPA 2-3-5-7-8 กลับ 8-6-4-2 กำกับ CPU 60% | วาดใหม่ใน canva จาก docs/autoscaling-evidence.txt | 50% | "HPA วัดจริง 2026-09-07" | ต้องวาดใหม่ |
+| ขวาบน | badge 3 ใบ | 226.4 req/s, fail 0.10%, p95 430 ms | canva text | เล็ก | - | วาดใน canva |
+| ขวาล่าง | screenshot | kubectl logs สองจังหวะ: pod เพิ่ม/ลด (ตัด NLB DNS ออกก่อนใส่) | ถ่ายจาก session จริง | เล็ก | - | ต้องแคปเพิ่ม |
 
 ---
 
-## สไลด์ 12/14 - Test Results (~1.5 นาที)
+## สไลด์ 12/13 - ข้อจำกัดและทางต่อไป (~1.5 นาที)
 
-**Headline:** ทดสอบจริงบนเครื่องจริง k6 + HPA
+**Headline:** ไม่ได้ทำเพราะอะไร และเติมคืนได้เมื่อไร
 
 **Body:**
-- k6: 98,500 คำขอ / 200 VUs - ผ่าน 99.89%
-- ความเร็ว 226.4 req/s avg 316.74 ms p95 430.56 ms
-- HPA: ทำงานแบบอัตโนมัติ pod 2 -> 3 -> 5 -> 7 -> 8 กลับสู่ 2
-- EKS GATE (2026-10-24): deploy ตั้งแต่ศูนย์ ผ่านครบทุกหมวด
+- Container Insights: ตั้ง **ปิด** ตั้งแต่ต้นเลย เพราะ CloudWatch agent ต้องขอ attach policy ที่ lab ปฏิเสธ (ยืนยันตั้งแต่ 2026-09-07) — ใช้ `kubectl top` + HPA log แทน
+- ไม่มี Chaos Testing, ไม่ได้วัด RTO/RPO และ Availability (คิดว่าไม่พอเวลา + งบ RDS)
+- เดิม "ไม่มีโดเมน" ไม่ใช่ข้อจำกัดแล้ว: dns.tf ถูก apply เป็น zone `eventide.creasy.club` (ตรวจ DNS 2026-10-25) — แต่ทุกเซสชันเริ่มเดโมต้อง `make up` ก่อน เว็บจึงออนไลน์
+- Google sign-in + Stripe webhook ที่ https เปิดแล้วหรือยัง ยังไม่ยืนยัน (ไฟล์ที่แต่งใช้ไม่อยู่ใน repo)
 
-**Key number:** 2 -> 8 pod กระทบ (226 req/s)
+**Key number:** เลิกพูด 'ไม่มี HTTPS' — ข้อจำกัดที่เหลือจริง: ทำลายทุกคืนตามงบ
 
 **Speaker notes:**
-สไลด์พิสูจน์ว่า "auto-scale ไม่ใช่คำโปรย" - เชิงแสดงให้เห็นว่าตัวเลขมาจากโค้ดจริงใน docs/autoscaling-evidence.txt กรรมการมักถามต่อว่าหลักพิจารณาตัวเลข (HPA threshold)? - ตอบ: ตามข้อกำหนดค่า default CPU ใน values มี.patенциально
+ข้อสรุป: ข้อจำกัดจริงเหลือเท่านี้ - ระบบถูกทำลายทุกคืน (งบ) และ monitoring ลึกยังไม่เปิด ต้องพูดว่า "เรารู้วิธีเปิด แต่ lab ไม่อนุญาต" ไม่ใช่ "เราไม่รู้" ทุกข้อยังไม่ทำควรพูดแบบตรง ๆ พร้อมทางแก้ที่ชั้นด้านบน
 
 **คำถามกรรมการที่ควรเตรียม:**
-- อะไรขลังเพิ่ม pods? - CPU average ตามหา (ดูไฟล์ values.yaml ข้อ hpa)
-- ทดสอบกับ production จริงหรือ sandbox? - ทดสอบบนคลัสเตอร์ EKS จริงที่ deploy ขึ้น production shape เล็ก (ตาม autoscaling-evidence.txt)
+- ย้ายระบบไปยังเว็บ production ต้องทำอะไรอีก? - ตอบ: ทุกอย่างใน repo สร้างซ้ำได้ (make up + make deploy) ระดับนี้ใช้จริงได้และ dns.tf แนบให้ทำงานต่อ
+
+- HPA ตั้งเวลาไว้หรือ trigger ทุกเมตริก? - ตอบ: ทำงานอัตโนมัติตาม metric CPU ไม่ต้องตั้งเวลา
 
 **รูปภาพ - Visual Plan**
 | ตำแหน่ง | ประเภท | เนื้อหา | แหล่ง | ขนาด | แคปชัน | สถานะ |
 |---|---|---|---|---|---|---|
-| กลางซ้าย | กราฟหลัก | ลำดับ pod: 2-3-5-7-8 แล้วกลับ 8-6-4-2 นับ per minute | วาดใหม่ใน canva จาก docs/autoscaling-evidence.txt | 50% | "HPA ตอบสนองจริงทั้งไปและกลับ" | ต้องวาดใหม่ |
-| ขวาบน | badge 3 ใบ | 226.4 req/s, 99.89%, p95 430ms | canva text | เล็ก | - | วาดใน canva |
-| ขวาล่าง | screenshot เล็ก | log kubectl จำนวน pod เปลี่ยน | ถ่ายจาก session จริง | เล็ก | - | ต้องแคปเพิ่ม |
-
----
-
-## สไลด์ 13/14 - ข้อจำกัดและทางต่อไป (~1.5 นาที)
-
-**Headline:** ตัดอะไรไป เพราะอะไร และเติมคืนได้เมื่อไร
-
-**Body:**
-- ไม่มี HTTPS: ไม่มีโดเมน - Stripe webhook + Google sign-in จึงปิด
-- ไม่มี Chaos Testing, ไม่ได้วัด RTO/RPO [ยังไม่ทำ]
-- CloudWatch Container Insights [ไม่พบข้อมูล - สถานะยังไม่ได้ตรวจ]
-- จุดที่ต่อยอดได้: เปิด dns.tf เมื่อมีโดเมน = HTTPS + Route53 ทำงาน
-
-**Key number:** ปิด HTTPS แต่เตรียม IaC รับไว้แล้ว
-
-**Speaker notes:**
-อุปสรรคที่เจอต้องเรียงตามเหตุผลที่ชัดเจน เสนอว่า "ตัดไว้ตามเหตุผลธุรกิจ (AWS SCP, IAM deny) ตัด far-Fetch และแสดงว่าเรารู้ทางแก้เปิด, ไม่ได้ทำเพราะไม่รู้" ย้ำว่า dns.tf ออกแบบ wildcard ACM + Route53 ไว้รออยู่แล้ว
-
-**คำถามกรรมการที่ควรเตรียม:**
-- ย้ายได้ไหมถ้ามี domain จริง? - ตอบ: เปิด dns.tf (Route53 + ACM) ทำงานเลย
-- ถ้า no domain จะทำ Stripe ได้ไหม?? - ใช้ stripe listen --forward-to จากเครื่องสาธิต (docs/TODO.md)
-
-**รูปภาพ - Visual Plan**
-| ตำแหน่ง | ประเภท | เนื้อหา | แหล่ง | ขนาด | แคปชัน | สถานะ |
-|---|---|---|---|---|---|---|
-| ขวากลาง | ภาพหลัก | ตาราง 2 คอลัมน์: ทำแล้ว (เขียว) vs ยังไม่ทำ (ส้ม) แต่ละอันมีป้ายเหตุผลสั้น | จาก docs/REPORT.md #2 + dns.tf | 50% | "ทุกข้อยังไม่ทำต้องมีเหตุผล" | วาดใน canva |
+| ขวากลาง | ภาพหลัก | ตาราง 2 คอลัมน์: ทำแล้ว (เขียว) vs ยังไม่ทำ (ส้ม) ป้ายเหตุผลสั้นรายแถว | จาก docs/PROJECT-KNOWLEDGE-BASE ข้อจำกัด + dns.tf | 50% | "ทุกข้อยังไม่ทำต้องมีเหตุผล" | วาดใน canva |
 | ขวาล่าง | ไอคอน | flag, road, traffic-cone | canva | เล็ก | - | วาดใน canva |
+## สไลด์ 13/13 - สรุป (~1 นาที)
 
----
-
-## สไลด์ 14/14 - สรุป (~1 นาที)
-
-**Headline:** เว็บขายตั๋วจริงบน EKS ในงบ $50
+**Headline:** ระบบจริงขึ้น EKS จริง มีเว็บให้เปิดจริง
 
 **Body:**
-- ออกแบบจากข้อจำกัดจริง ไม่ใช่คำตอบจาก textbook
-- ทุกตัวเลขพูดมามีหลักฐานไฟล์ใน repo
-- เสาที่แข็ง: Cost, OpEx - เสาที่อ่อน: Reliability
-- พร้อมต่อยอด: dns.tf, HPA, multi-AZ เมื่องบอนุญาต
+- ทั้ง platform rebuild ซ้ำได้ทุกชิ้น: modules/platform = 25 resources ตรงทุกครั้งที่ apply
+- เว็บใช้ได้จริง: https://eventide.creasy.club/ (ต้อง `make up` ตอนเริ่มเซสชัน)
+- เสาแข็ง: OpEx · Perf · Cost - เสาที่ยังเผา: Reliability (ไม่มี chaos/RTO), Sustainability (ไม่มีเมตริก), Security (Google/Stripe รอยืนยัน)
+- งบพอ: $0.18/ชม. ขึ้นเคลื่อน ล้างหมดตอนจบเซสชันทุกครั้ง
 
-**Key number:** 14 สไลด์ = 1 ระบบ = 6 เสาจริง
+**Key number:** 226.4 req/s ทดสอบจริง · $0.18/ชม. · https พร้อม
 
 **Speaker notes:**
-ปิดด้วยข้อความเดียว: "เราปล่อยระบบจริงที่ลูกค้าใช้ซื้อตั๋วจริงได้ ไม่ใช่ demo กระดาษ" ถ้ากรรมการชวน chat ให้กลับไปที่ไดอะแกรม as-built ทุกคำตอบอ้างไฟล์
+ปิดด้วยประโยคเดียว: "ไม่ใช่ demo กระดาษ — ระบบ deploy ขึ้น AWS จริง มีเว็บเปิดใช้จริง" ให้ยกสามของแข็ง: HTTPS ผ่าน ACM, เมลส่งผ่าน SQS/DLQ, auto-scaling ด้วย HPA ทำงานจริง
+
+**คำถามกรรมการที่ควรเตรียม:** ถ้าผู้ใช้โตเป็นแสน จะเพิ่ม resource อะไรแรก?
+- ตอบ: RDS ขึ้น class ก่อน (db.t3.micro สูญสุดที่ ~87 connections) -> ตามด้วย cache/CDN -> แล้วจึงคิด replicas
 
 **รูปภาพ - Visual Plan**
 | ตำแหน่ง | ประเภท | เนื้อหา | แหล่ง | ขนาด | แคปชัน | สถานะ |
 |---|---|---|---|---|---|---|
-| ขวากลาง | ภาพหลัก | ไดอะแกรม as-built ย่อขนาด + 6 ไอคอนเสาด้วยสี 6 สี | eventide-aws-as-built.png + canva (แสดง skyline ของ 6 สี) | 55% | "ระบบเดียว ตรวจได้ทุกเสา" | พร้อมใช้ |
-| ขวาล่าง | ไอคอน | Q&A icon | canva | เล็ก | - | วาดใน canva |
+| ขวากลาง | ภาพหลัก | ไดอะแกรม as-built ย่อ + 6 ไอคอนเสาใช้สี 6 สี | eventide-aws-as-built.png + canva | 55% | "ระบบเดียวตรวจได้ทุกเสา" | พร้อมใช้ |
+| ขวาล่าง | ไอคอน | Q&A | canva | เล็ก | - | วาดใน canva |
 
 ---
 
-## หมายเหตุโครงเรื่อง (เช็คว่าครบ)
-ทั้ง 14 สไลด์ครบ สไลด์ 1, 4, 5 (แผนที่) และ 14 (สรุป) เป็นสไลด์โครงเรื่อง ที่ 6-11 คือเสา เรียงตามสี 6 สี
+## สรุป
+
+- รวมเวลา 13 สไลด์ = **18 นาที** ยังเว้นเผื่อ Q&A/demo
+- สไลด์ใหม่เทียบเดิม: สไลด์ 5 แยกกลุ่มตาม B (ครบถ้วน 3 / บางส่วน 3) · สไลด์ 9 รวม Sustainability + Cost เดิม · เปลี่ยนเรื่องโดเมน/ต้นทุน/k6 ทั้งชุด
+- ทุกข้อความที่โยงไปเรื่อง domain/https/google/stripe ทางยิงในคำถามค้างท้าย A/B/D doc
